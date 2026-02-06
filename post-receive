@@ -38,9 +38,34 @@ if [ ! -f "${STAGING_DIR}/index.html" ]; then
     exit 1
 fi
 
-# Копируем файлы из staging в production атомарно
-echo "Копирование файлов..."
-rsync -av --delete ${STAGING_DIR}/ ${DEPLOY_DIR}/ || cp -r ${STAGING_DIR}/* ${DEPLOY_DIR}/
+# Копируем только файлы сайта из staging в production атомарно
+echo "Копирование файлов сайта..."
+# Копируем только index.html и другие файлы сайта (HTML, CSS, JS, изображения)
+# Исключаем служебные файлы: deploy.ps1, nginx_*.conf, post-receive, README.md, DEPLOY_GUIDE.md, SSL/
+rsync -av --delete \
+  --include='index.html' \
+  --include='*.html' \
+  --include='*.css' \
+  --include='*.js' \
+  --include='*.jpg' \
+  --include='*.jpeg' \
+  --include='*.png' \
+  --include='*.gif' \
+  --include='*.svg' \
+  --include='*.ico' \
+  --include='*.woff' \
+  --include='*.woff2' \
+  --include='*.ttf' \
+  --include='*.eot' \
+  --exclude='deploy.ps1' \
+  --exclude='nginx_*.conf' \
+  --exclude='post-receive' \
+  --exclude='README.md' \
+  --exclude='DEPLOY_GUIDE.md' \
+  --exclude='SSL/' \
+  --exclude='*.sh' \
+  ${STAGING_DIR}/ ${DEPLOY_DIR}/ || \
+  (cp ${STAGING_DIR}/index.html ${DEPLOY_DIR}/ 2>/dev/null || true)
 
 # Устанавливаем правильные права
 chown -R ${NGINX_USER}:${NGINX_USER} ${DEPLOY_DIR}
