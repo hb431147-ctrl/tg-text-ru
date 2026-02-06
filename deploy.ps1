@@ -28,7 +28,7 @@ if (-not (Test-Path ".git")) {
 
 # Добавление файлов
 Write-Host "Добавление файлов в Git..." -ForegroundColor Yellow
-git add index.html
+git add .
 
 # Проверка изменений
 $status = git status --porcelain
