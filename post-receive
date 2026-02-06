@@ -1,0 +1,62 @@
+#!/bin/bash
+
+# Git hook для автоматического деплоя без прерывания работы сайта
+# Разместить в: /var/www/tg-text.ru/.git/hooks/post-receive
+
+set -e
+
+DOMAIN="tg-text.ru"
+WWW_ROOT="/var/www/${DOMAIN}"
+DEPLOY_DIR="${WWW_ROOT}/public_html"
+STAGING_DIR="${WWW_ROOT}/staging"
+NGINX_USER="http"
+GIT_DIR="${WWW_ROOT}/.git"
+
+echo "=== Начало деплоя ==="
+date
+
+# Читаем данные из stdin (стандартный ввод Git hook)
+while read oldrev newrev refname; do
+    branch=$(git rev-parse --symbolic --abbrev-ref $refname 2>/dev/null || echo "main")
+    echo "Обновление ветки: $branch (ref: $refname)"
+done
+
+# Создаем staging директорию
+mkdir -p ${STAGING_DIR}
+
+# Делаем checkout в staging директорию
+cd ${WWW_ROOT}
+export GIT_DIR=${GIT_DIR}
+export GIT_WORK_TREE=${STAGING_DIR}
+git checkout -f main 2>/dev/null || git checkout -f
+unset GIT_DIR
+unset GIT_WORK_TREE
+
+# Проверяем наличие index.html
+if [ ! -f "${STAGING_DIR}/index.html" ]; then
+    echo "ОШИБКА: index.html не найден в репозитории!"
+    exit 1
+fi
+
+# Копируем файлы из staging в production атомарно
+echo "Копирование файлов..."
+rsync -av --delete ${STAGING_DIR}/ ${DEPLOY_DIR}/ || cp -r ${STAGING_DIR}/* ${DEPLOY_DIR}/
+
+# Устанавливаем правильные права
+chown -R ${NGINX_USER}:${NGINX_USER} ${DEPLOY_DIR}
+chmod -R 755 ${DEPLOY_DIR}
+
+# Проверяем конфигурацию nginx
+echo "Проверка конфигурации nginx..."
+nginx -t
+
+# Перезагружаем nginx (graceful reload - без прерывания работы)
+echo "Перезагрузка nginx..."
+systemctl reload nginx
+
+# Очищаем staging директорию
+rm -rf ${STAGING_DIR}
+
+echo "=== Деплой завершен успешно ==="
+date
+
