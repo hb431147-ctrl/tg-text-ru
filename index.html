@@ -24,10 +24,10 @@
         .container {
             background: white;
             border-radius: 20px;
-            padding: 60px 40px;
+            padding: 40px;
             box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
             text-align: center;
-            max-width: 600px;
+            max-width: 700px;
             width: 100%;
             animation: fadeIn 0.8s ease-in;
         }
@@ -45,8 +45,8 @@
         
         h1 {
             color: #333;
-            font-size: 3em;
-            margin-bottom: 20px;
+            font-size: 2.5em;
+            margin-bottom: 10px;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
@@ -54,8 +54,8 @@
         }
         
         .emoji {
-            font-size: 4em;
-            margin-bottom: 20px;
+            font-size: 3em;
+            margin-bottom: 15px;
             animation: wave 2s ease-in-out infinite;
         }
         
@@ -71,10 +71,117 @@
             }
         }
         
-        p {
-            color: #666;
-            font-size: 1.2em;
+        .form-section {
+            margin-top: 30px;
+            text-align: left;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 600;
+            font-size: 0.95em;
+        }
+        
+        textarea, input[type="text"] {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 1em;
+            font-family: inherit;
+            transition: border-color 0.3s;
+            resize: vertical;
+        }
+        
+        textarea:focus, input[type="text"]:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        textarea {
+            min-height: 120px;
+        }
+        
+        input[type="text"] {
+            min-height: 45px;
+        }
+        
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 14px 30px;
+            font-size: 1.1em;
+            font-weight: 600;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            width: 100%;
+            margin-top: 10px;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn:active {
+            transform: translateY(0);
+        }
+        
+        .result {
+            margin-top: 25px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+            text-align: left;
+            display: none;
+        }
+        
+        .result.show {
+            display: block;
+            animation: slideIn 0.3s ease-out;
+        }
+        
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .result-label {
+            font-weight: 600;
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 0.9em;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .result-text {
+            color: #333;
+            font-size: 1.05em;
             line-height: 1.6;
+            word-wrap: break-word;
+        }
+        
+        .info-text {
+            color: #666;
+            font-size: 0.9em;
+            margin-top: 5px;
+            font-style: italic;
         }
     </style>
 </head>
@@ -82,8 +189,189 @@
     <div class="container">
         <div class="emoji">👋</div>
         <h1>Привет, я Никита</h1>
-        <p>Добро пожаловать на мой сайт!</p>
+        
+        <div class="form-section">
+            <div class="form-group">
+                <label for="textInput">Введите текст для обработки:</label>
+                <textarea id="textInput" placeholder="Введите текст здесь..."></textarea>
+            </div>
+            
+            <div class="form-group">
+                <label for="excludeInput">Слова для исключения (через запятую):</label>
+                <input type="text" id="excludeInput" placeholder="например: привет, мир">
+                <div class="info-text">Будут исключены указанные слова и однокоренные им</div>
+            </div>
+            
+            <button class="btn" onclick="processText()">Обработать текст</button>
+            
+            <div id="result" class="result">
+                <div class="result-label">Результат:</div>
+                <div class="result-text" id="resultText"></div>
+            </div>
+        </div>
     </div>
+
+    <script>
+        // Функция для получения корня слова (упрощенный алгоритм)
+        function getWordRoot(word) {
+            word = word.toLowerCase().trim();
+            if (word.length <= 3) return word;
+            
+            // Убираем типичные окончания русского языка
+            const endings = ['ый', 'ая', 'ое', 'ые', 'ой', 'ей', 'ом', 'ем', 'ую', 'ую', 
+                           'ов', 'ев', 'ин', 'ын', 'ых', 'их', 'ам', 'ям', 'ами', 'ями',
+                           'ах', 'ях', 'и', 'ы', 'а', 'о', 'е', 'у', 'ю', 'ь', 'ъ'];
+            
+            // Пробуем убрать окончания разной длины
+            for (let len = 3; len >= 1; len--) {
+                if (word.length > len) {
+                    const ending = word.slice(-len);
+                    if (endings.includes(ending)) {
+                        return word.slice(0, -len);
+                    }
+                }
+            }
+            
+            // Если окончание не найдено, возвращаем первые 4-5 символов как корень
+            return word.slice(0, Math.max(4, word.length - 2));
+        }
+        
+        // Проверка, являются ли слова однокоренными
+        function areRelatedWords(word1, word2) {
+            const root1 = getWordRoot(word1);
+            const root2 = getWordRoot(word2);
+            
+            // Сравниваем корни
+            if (root1 === root2) return true;
+            
+            // Проверяем, содержит ли один корень другой (для сложных случаев)
+            if (root1.length >= 4 && root2.length >= 4) {
+                if (root1.includes(root2) || root2.includes(root1)) {
+                    return true;
+                }
+            }
+            
+            // Проверяем общий префикс длиной 4+ символов
+            let commonPrefix = '';
+            const minLen = Math.min(root1.length, root2.length);
+            for (let i = 0; i < minLen; i++) {
+                if (root1[i] === root2[i]) {
+                    commonPrefix += root1[i];
+                } else {
+                    break;
+                }
+            }
+            
+            return commonPrefix.length >= 4;
+        }
+        
+        // Функция перемешивания массива (алгоритм Фишера-Йетса)
+        function shuffleArray(array) {
+            const shuffled = [...array];
+            for (let i = shuffled.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+            }
+            return shuffled;
+        }
+        
+        // Основная функция обработки текста
+        function processText() {
+            const textInput = document.getElementById('textInput').value.trim();
+            const excludeInput = document.getElementById('excludeInput').value.trim();
+            const resultDiv = document.getElementById('result');
+            const resultText = document.getElementById('resultText');
+            
+            if (!textInput) {
+                alert('Пожалуйста, введите текст для обработки');
+                return;
+            }
+            
+            // Разбиваем текст на слова
+            const words = textInput.split(/\s+/).filter(word => word.length > 0);
+            
+            if (words.length === 0) {
+                alert('Текст не содержит слов');
+                return;
+            }
+            
+            // Получаем список слов для исключения
+            const excludeWords = excludeInput
+                .split(',')
+                .map(word => word.trim().toLowerCase())
+                .filter(word => word.length > 0);
+            
+            // Фильтруем слова: исключаем указанные и однокоренные
+            let filteredWords = words.filter(word => {
+                const wordLower = word.toLowerCase();
+                
+                // Проверяем точное совпадение
+                if (excludeWords.includes(wordLower)) {
+                    return false;
+                }
+                
+                // Проверяем однокоренные слова
+                for (const excludeWord of excludeWords) {
+                    if (areRelatedWords(wordLower, excludeWord)) {
+                        return false;
+                    }
+                }
+                
+                return true;
+            });
+            
+            if (filteredWords.length === 0) {
+                resultText.textContent = 'Все слова были исключены. Результат пуст.';
+                resultDiv.classList.add('show');
+                return;
+            }
+            
+            // Перемешиваем оставшиеся слова
+            const shuffledWords = shuffleArray(filteredWords);
+            
+            // Формируем результат, сохраняя знаки препинания
+            let result = '';
+            let wordIndex = 0;
+            const originalWords = textInput.split(/(\s+)/);
+            
+            for (let i = 0; i < originalWords.length; i++) {
+                const segment = originalWords[i];
+                if (segment.trim().length > 0 && !/^\s+$/.test(segment)) {
+                    // Это слово
+                    if (wordIndex < shuffledWords.length) {
+                        result += shuffledWords[wordIndex];
+                        wordIndex++;
+                    }
+                } else {
+                    // Это пробелы или знаки препинания
+                    result += segment;
+                }
+            }
+            
+            // Если остались слова после обработки (из-за исключений)
+            while (wordIndex < shuffledWords.length) {
+                result += (result ? ' ' : '') + shuffledWords[wordIndex];
+                wordIndex++;
+            }
+            
+            // Выводим результат
+            resultText.textContent = result || 'Результат пуст';
+            resultDiv.classList.add('show');
+        }
+        
+        // Обработка Enter в полях ввода
+        document.getElementById('textInput').addEventListener('keydown', function(e) {
+            if (e.ctrlKey && e.key === 'Enter') {
+                processText();
+            }
+        });
+        
+        document.getElementById('excludeInput').addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                processText();
+            }
+        });
+    </script>
 </body>
 </html>
-
