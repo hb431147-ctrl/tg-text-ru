@@ -26,43 +26,17 @@ app.use(cors({
 // Обработка OPTIONS запросов
 app.options('*', cors());
 
-// Парсинг JSON с обработкой ошибок
+// Парсинг JSON
 app.use(express.json({ 
     limit: '10mb',
-    strict: false,
-    type: ['application/json', 'text/json']
+    strict: false
 }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-
-// Middleware для обработки raw body (для отладки)
-app.use((req, res, next) => {
-    if (req.method === 'POST' && req.url.startsWith('/api/')) {
-        let data = '';
-        req.on('data', chunk => {
-            data += chunk.toString();
-        });
-        req.on('end', () => {
-            if (data && !req.body) {
-                try {
-                    req.body = JSON.parse(data);
-                } catch (e) {
-                    console.error('Ошибка парсинга raw body:', e.message);
-                    console.error('Данные:', data);
-                }
-            }
-            next();
-        });
-    } else {
-        next();
-    }
-});
 
 // Обработка ошибок парсинга JSON
 app.use((err, req, res, next) => {
     if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
         console.error('Ошибка парсинга JSON:', err.message);
-        console.error('URL:', req.url);
-        console.error('Headers:', req.headers);
         return res.status(400).json({ error: 'Неверный формат JSON: ' + err.message });
     }
     next();
