@@ -59,6 +59,7 @@
                 };
                 
                 console.log('Отправка запроса:', requestData);
+                console.log('URL:', window.location.origin + '/api/process');
                 
                 const response = await fetch('/api/process', {
                     method: 'POST',
@@ -66,13 +67,25 @@
                         'Content-Type': 'application/json',
                         'Accept': 'application/json'
                     },
-                    body: JSON.stringify(requestData)
+                    body: JSON.stringify(requestData),
+                    credentials: 'same-origin'
+                }).catch(err => {
+                    console.error('Ошибка fetch:', err);
+                    throw err;
                 });
                 
                 console.log('Получен ответ:', response.status, response.statusText);
+                console.log('Headers:', Object.fromEntries(response.headers.entries()));
                 
                 if (!response.ok) {
-                    const errorData = await response.json().catch(() => ({ error: 'Неизвестная ошибка' }));
+                    let errorData;
+                    try {
+                        errorData = await response.json();
+                    } catch (e) {
+                        const text = await response.text();
+                        console.error('Не удалось распарсить ошибку:', text);
+                        errorData = { error: `Ошибка ${response.status}: ${response.statusText}` };
+                    }
                     throw new Error(errorData.error || `Ошибка ${response.status}: ${response.statusText}`);
                 }
                 
@@ -85,11 +98,13 @@
                 
             } catch (error) {
                 console.error('Ошибка:', error);
+                console.error('Stack:', error.stack);
+                
                 let errorMessage = 'Ошибка: ' + error.message;
                 
                 // Дополнительная информация для отладки
-                if (error.message === 'Failed to fetch') {
-                    errorMessage = 'Ошибка: Не удалось подключиться к серверу. Проверьте подключение к интернету.';
+                if (error.message === 'Failed to fetch' || error.name === 'TypeError') {
+                    errorMessage = 'Ошибка подключения: Не удалось подключиться к серверу. Проверьте консоль браузера (F12) для деталей.';
                 }
                 
                 resultText.textContent = errorMessage;
