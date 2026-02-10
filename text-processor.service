@@ -1,16 +1,18 @@
 [Unit]
-Description=Text Processor API Service
+Description=Text Processor API Service (Node.js)
 After=network.target
 
 [Service]
 Type=simple
 User=http
 WorkingDirectory=/var/www/tg-text.ru/api
-Environment="PATH=/usr/bin:/usr/local/bin"
-ExecStart=/var/www/tg-text.ru/api/venv/bin/gunicorn --bind 127.0.0.1:5000 --workers 2 --timeout 30 app:app
+Environment="NODE_ENV=production"
+Environment="PORT=5000"
+ExecStart=/usr/bin/node app.js
 Restart=always
 RestartSec=10
+StandardOutput=journal
+StandardError=journal
 
 [Install]
 WantedBy=multi-user.target
-
