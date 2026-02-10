@@ -9,15 +9,45 @@ const cors = require('cors');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Middleware
+// Middleware для логирования
+app.use((req, res, next) => {
+    console.log(`${new Date().toISOString()} ${req.method} ${req.url}`);
+    next();
+});
+
+// CORS
 app.use(cors({
     origin: '*',
     methods: ['GET', 'POST', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
     credentials: false
 }));
-app.use(express.json({ limit: '10mb' }));
+
+// Обработка OPTIONS запросов
+app.options('*', cors());
+
+// Парсинг JSON с обработкой ошибок
+app.use(express.json({ 
+    limit: '10mb',
+    verify: (req, res, buf) => {
+        try {
+            JSON.parse(buf.toString());
+        } catch (e) {
+            console.error('Ошибка парсинга JSON:', e.message);
+            console.error('Буфер:', buf.toString());
+        }
+    }
+}));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// Обработка ошибок парсинга JSON
+app.use((err, req, res, next) => {
+    if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
+        console.error('Ошибка парсинга JSON:', err.message);
+        return res.status(400).json({ error: 'Неверный формат JSON: ' + err.message });
+    }
+    next();
+});
 
 /**
  * Получить корень слова (упрощенный алгоритм)
