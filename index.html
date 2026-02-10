@@ -53,22 +53,31 @@
             
             try {
                 // Отправляем запрос на API
+                const requestData = {
+                    text: textInput,
+                    exclude_words: excludeInput
+                };
+                
+                console.log('Отправка запроса:', requestData);
+                
                 const response = await fetch('/api/process', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
+                        'Accept': 'application/json'
                     },
-                    body: JSON.stringify({
-                        text: textInput,
-                        exclude_words: excludeInput
-                    })
+                    body: JSON.stringify(requestData)
                 });
                 
-                const data = await response.json();
+                console.log('Получен ответ:', response.status, response.statusText);
                 
                 if (!response.ok) {
-                    throw new Error(data.error || 'Ошибка обработки текста');
+                    const errorData = await response.json().catch(() => ({ error: 'Неизвестная ошибка' }));
+                    throw new Error(errorData.error || `Ошибка ${response.status}: ${response.statusText}`);
                 }
+                
+                const data = await response.json();
+                console.log('Данные получены:', data);
                 
                 // Показываем результат
                 resultText.textContent = data.result || 'Результат пуст';
@@ -76,7 +85,14 @@
                 
             } catch (error) {
                 console.error('Ошибка:', error);
-                resultText.textContent = 'Ошибка: ' + error.message;
+                let errorMessage = 'Ошибка: ' + error.message;
+                
+                // Дополнительная информация для отладки
+                if (error.message === 'Failed to fetch') {
+                    errorMessage = 'Ошибка: Не удалось подключиться к серверу. Проверьте подключение к интернету.';
+                }
+                
+                resultText.textContent = errorMessage;
                 resultDiv.classList.add('show');
             } finally {
                 // Восстанавливаем кнопку

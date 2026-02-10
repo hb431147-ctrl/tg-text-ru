@@ -10,9 +10,14 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // Middleware
-app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(cors({
+    origin: '*',
+    methods: ['GET', 'POST', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: false
+}));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 /**
  * Получить корень слова (упрощенный алгоритм)
@@ -165,18 +170,28 @@ function processText(text, excludeWordsStr) {
  */
 app.post('/api/process', (req, res) => {
     try {
+        console.log('Получен запрос:', {
+            method: req.method,
+            url: req.url,
+            headers: req.headers,
+            body: req.body
+        });
+        
         const { text, exclude_words } = req.body;
         
         if (!text || !text.trim()) {
+            console.log('Ошибка: текст пустой');
             return res.status(400).json({ error: 'Текст не может быть пустым' });
         }
         
         const result = processText(text.trim(), exclude_words ? exclude_words.trim() : '');
         
         if (result.error) {
+            console.log('Ошибка обработки:', result.error);
             return res.status(400).json(result);
         }
         
+        console.log('Результат успешно обработан');
         return res.status(200).json(result);
     } catch (error) {
         console.error('Ошибка обработки:', error);
