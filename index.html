@@ -33,151 +33,56 @@
     </div>
 
     <script>
-        // Функция для получения корня слова (упрощенный алгоритм)
-        function getWordRoot(word) {
-            word = word.toLowerCase().trim();
-            if (word.length <= 3) return word;
-            
-            // Убираем типичные окончания русского языка
-            const endings = ['ый', 'ая', 'ое', 'ые', 'ой', 'ей', 'ом', 'ем', 'ую', 'ую', 
-                           'ов', 'ев', 'ин', 'ын', 'ых', 'их', 'ам', 'ям', 'ами', 'ями',
-                           'ах', 'ях', 'и', 'ы', 'а', 'о', 'е', 'у', 'ю', 'ь', 'ъ'];
-            
-            // Пробуем убрать окончания разной длины
-            for (let len = 3; len >= 1; len--) {
-                if (word.length > len) {
-                    const ending = word.slice(-len);
-                    if (endings.includes(ending)) {
-                        return word.slice(0, -len);
-                    }
-                }
-            }
-            
-            // Если окончание не найдено, возвращаем первые 4-5 символов как корень
-            return word.slice(0, Math.max(4, word.length - 2));
-        }
-        
-        // Проверка, являются ли слова однокоренными
-        function areRelatedWords(word1, word2) {
-            const root1 = getWordRoot(word1);
-            const root2 = getWordRoot(word2);
-            
-            // Сравниваем корни
-            if (root1 === root2) return true;
-            
-            // Проверяем, содержит ли один корень другой (для сложных случаев)
-            if (root1.length >= 4 && root2.length >= 4) {
-                if (root1.includes(root2) || root2.includes(root1)) {
-                    return true;
-                }
-            }
-            
-            // Проверяем общий префикс длиной 4+ символов
-            let commonPrefix = '';
-            const minLen = Math.min(root1.length, root2.length);
-            for (let i = 0; i < minLen; i++) {
-                if (root1[i] === root2[i]) {
-                    commonPrefix += root1[i];
-                } else {
-                    break;
-                }
-            }
-            
-            return commonPrefix.length >= 4;
-        }
-        
-        // Функция перемешивания массива (алгоритм Фишера-Йетса)
-        function shuffleArray(array) {
-            const shuffled = [...array];
-            for (let i = shuffled.length - 1; i > 0; i--) {
-                const j = Math.floor(Math.random() * (i + 1));
-                [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-            }
-            return shuffled;
-        }
-        
-        // Основная функция обработки текста
-        function processText() {
+        // Функция обработки текста через API
+        async function processText() {
             const textInput = document.getElementById('textInput').value.trim();
             const excludeInput = document.getElementById('excludeInput').value.trim();
             const resultDiv = document.getElementById('result');
             const resultText = document.getElementById('resultText');
+            const btn = document.querySelector('.btn');
             
             if (!textInput) {
                 alert('Пожалуйста, введите текст для обработки');
                 return;
             }
             
-            // Разбиваем текст на слова
-            const words = textInput.split(/\s+/).filter(word => word.length > 0);
+            // Показываем индикатор загрузки
+            btn.disabled = true;
+            btn.textContent = 'Обработка...';
+            resultDiv.classList.remove('show');
             
-            if (words.length === 0) {
-                alert('Текст не содержит слов');
-                return;
-            }
-            
-            // Получаем список слов для исключения
-            const excludeWords = excludeInput
-                .split(',')
-                .map(word => word.trim().toLowerCase())
-                .filter(word => word.length > 0);
-            
-            // Фильтруем слова: исключаем указанные и однокоренные
-            let filteredWords = words.filter(word => {
-                const wordLower = word.toLowerCase();
+            try {
+                // Отправляем запрос на API
+                const response = await fetch('/api/process', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        text: textInput,
+                        exclude_words: excludeInput
+                    })
+                });
                 
-                // Проверяем точное совпадение
-                if (excludeWords.includes(wordLower)) {
-                    return false;
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(data.error || 'Ошибка обработки текста');
                 }
                 
-                // Проверяем однокоренные слова
-                for (const excludeWord of excludeWords) {
-                    if (areRelatedWords(wordLower, excludeWord)) {
-                        return false;
-                    }
-                }
-                
-                return true;
-            });
-            
-            if (filteredWords.length === 0) {
-                resultText.textContent = 'Все слова были исключены. Результат пуст.';
+                // Показываем результат
+                resultText.textContent = data.result || 'Результат пуст';
                 resultDiv.classList.add('show');
-                return;
+                
+            } catch (error) {
+                console.error('Ошибка:', error);
+                resultText.textContent = 'Ошибка: ' + error.message;
+                resultDiv.classList.add('show');
+            } finally {
+                // Восстанавливаем кнопку
+                btn.disabled = false;
+                btn.textContent = 'Обработать текст';
             }
-            
-            // Перемешиваем оставшиеся слова
-            const shuffledWords = shuffleArray(filteredWords);
-            
-            // Формируем результат, сохраняя знаки препинания
-            let result = '';
-            let wordIndex = 0;
-            const originalWords = textInput.split(/(\s+)/);
-            
-            for (let i = 0; i < originalWords.length; i++) {
-                const segment = originalWords[i];
-                if (segment.trim().length > 0 && !/^\s+$/.test(segment)) {
-                    // Это слово
-                    if (wordIndex < shuffledWords.length) {
-                        result += shuffledWords[wordIndex];
-                        wordIndex++;
-                    }
-                } else {
-                    // Это пробелы или знаки препинания
-                    result += segment;
-                }
-            }
-            
-            // Если остались слова после обработки (из-за исключений)
-            while (wordIndex < shuffledWords.length) {
-                result += (result ? ' ' : '') + shuffledWords[wordIndex];
-                wordIndex++;
-            }
-            
-            // Выводим результат
-            resultText.textContent = result || 'Результат пуст';
-            resultDiv.classList.add('show');
         }
         
         // Обработка Enter в полях ввода
