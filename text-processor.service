@@ -7,7 +7,7 @@ Type=simple
 User=http
 WorkingDirectory=/var/www/tg-text.ru/api
 Environment="PATH=/usr/bin:/usr/local/bin"
-ExecStart=/usr/bin/gunicorn --bind 127.0.0.1:5000 --workers 2 --timeout 30 app:app
+ExecStart=/var/www/tg-text.ru/api/venv/bin/gunicorn --bind 127.0.0.1:5000 --workers 2 --timeout 30 app:app
 Restart=always
 RestartSec=10
 
