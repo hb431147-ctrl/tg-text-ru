@@ -29,21 +29,40 @@ app.options('*', cors());
 // Парсинг JSON с обработкой ошибок
 app.use(express.json({ 
     limit: '10mb',
-    verify: (req, res, buf) => {
-        try {
-            JSON.parse(buf.toString());
-        } catch (e) {
-            console.error('Ошибка парсинга JSON:', e.message);
-            console.error('Буфер:', buf.toString());
-        }
-    }
+    strict: false,
+    type: ['application/json', 'text/json']
 }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// Middleware для обработки raw body (для отладки)
+app.use((req, res, next) => {
+    if (req.method === 'POST' && req.url.startsWith('/api/')) {
+        let data = '';
+        req.on('data', chunk => {
+            data += chunk.toString();
+        });
+        req.on('end', () => {
+            if (data && !req.body) {
+                try {
+                    req.body = JSON.parse(data);
+                } catch (e) {
+                    console.error('Ошибка парсинга raw body:', e.message);
+                    console.error('Данные:', data);
+                }
+            }
+            next();
+        });
+    } else {
+        next();
+    }
+});
 
 // Обработка ошибок парсинга JSON
 app.use((err, req, res, next) => {
     if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
         console.error('Ошибка парсинга JSON:', err.message);
+        console.error('URL:', req.url);
+        console.error('Headers:', req.headers);
         return res.status(400).json({ error: 'Неверный формат JSON: ' + err.message });
     }
     next();
@@ -203,11 +222,21 @@ app.post('/api/process', (req, res) => {
         console.log('Получен запрос:', {
             method: req.method,
             url: req.url,
-            headers: req.headers,
+            contentType: req.get('Content-Type'),
             body: req.body
         });
         
-        const { text, exclude_words } = req.body;
+        // Получаем данные из body
+        let text = req.body?.text || req.body?.textInput || '';
+        let exclude_words = req.body?.exclude_words || req.body?.excludeWords || req.body?.exclude || '';
+        
+        // Если body пустой, пробуем query параметры
+        if (!text) {
+            text = req.query.text || '';
+        }
+        if (!exclude_words) {
+            exclude_words = req.query.exclude_words || '';
+        }
         
         if (!text || !text.trim()) {
             console.log('Ошибка: текст пустой');
