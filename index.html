@@ -59,9 +59,15 @@
                 };
                 
                 console.log('Отправка запроса:', requestData);
-                console.log('URL:', window.location.origin + '/api/process');
                 
-                const response = await fetch('/api/process', {
+                // Определяем URL API: если открыто локально, используем абсолютный URL
+                const apiUrl = (window.location.protocol === 'file:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+                    ? 'https://tg-text.ru/api/process'
+                    : '/api/process';
+                
+                console.log('URL:', apiUrl);
+                
+                const response = await fetch(apiUrl, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
