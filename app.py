@@ -142,13 +142,27 @@ def process_text(text, exclude_words_str):
 def api_process():
     """API endpoint для обработки текста"""
     try:
-        data = request.get_json()
+        # Пробуем получить данные из JSON
+        data = None
+        if request.is_json:
+            data = request.get_json()
+        elif request.data:
+            import json
+            try:
+                data = json.loads(request.data.decode('utf-8'))
+            except:
+                pass
         
+        # Если JSON не получился, пробуем form-data или query string
         if not data:
-            return jsonify({'error': 'Неверный формат данных'}), 400
+            text = request.form.get('text', '') or request.args.get('text', '')
+            exclude_words = request.form.get('exclude_words', '') or request.args.get('exclude_words', '')
+        else:
+            text = data.get('text', '').strip()
+            exclude_words = data.get('exclude_words', '').strip()
         
-        text = data.get('text', '').strip()
-        exclude_words = data.get('exclude_words', '').strip()
+        if not text:
+            return jsonify({'error': 'Текст не может быть пустым'}), 400
         
         result, status_code = process_text(text, exclude_words)
         return jsonify(result), status_code
