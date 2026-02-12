@@ -1,4 +1,4 @@
-# PowerShell скрипт для деплоя на сервер
+﻿# PowerShell скрипт для деплоя на сервер
 # Использование: .\deploy.ps1
 
 $SERVER = "root@45.153.70.209"
@@ -57,4 +57,5 @@ try {
     Write-Host "ОШИБКА при отправке на сервер: $_" -ForegroundColor Red
     exit 1
 }
+
 
