@@ -1,5 +1,6 @@
 ﻿# PowerShell скрипт для деплоя на сервер
 # Использование: .\deploy.ps1
+# Или: powershell -ExecutionPolicy Bypass -File .\deploy.ps1
 
 $SERVER = "root@45.153.70.209"
 $DOMAIN = "tg-text.ru"
