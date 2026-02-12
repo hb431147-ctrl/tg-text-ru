@@ -1,0 +1,39 @@
+# SSL сертификаты и ключи
+SSL/
+*.key
+*.crt
+*.pem
+*.p7b
+*.der
+*.csr
+
+# Логи
+*.log
+logs/
+
+# Резервные копии сервера
+server_backup/
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Системные файлы
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# IDE
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Временные файлы
+*.tmp
+*.temp
+
