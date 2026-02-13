@@ -33,6 +33,7 @@ Host 45.153.70.209
     IdentityFile $SSH_KEY
     StrictHostKeyChecking accept-new
     IdentitiesOnly yes
+    PreferredAuthentications publickey
 "@
 
 # Проверяем, есть ли уже запись для этого хоста в config
@@ -41,6 +42,26 @@ if (Test-Path $SSH_CONFIG) {
     if ($configContent -notmatch "Host 45\.153\.70\.209") {
         # Добавляем запись в конец файла
         Add-Content -Path $SSH_CONFIG -Value "`n$sshConfigEntry"
+    } else {
+        # Обновляем существующую запись
+        $lines = Get-Content $SSH_CONFIG
+        $newLines = @()
+        $inHostBlock = $false
+        foreach ($line in $lines) {
+            if ($line -match "^Host 45\.153\.70\.209$") {
+                $inHostBlock = $true
+                $newLines += $sshConfigEntry
+            } elseif ($inHostBlock -and $line -match "^Host ") {
+                $inHostBlock = $false
+                $newLines += $line
+            } elseif (-not $inHostBlock) {
+                $newLines += $line
+            }
+        }
+        if (-not $inHostBlock) {
+            $newLines += $sshConfigEntry
+        }
+        Set-Content -Path $SSH_CONFIG -Value ($newLines -join "`n")
     }
 } else {
     # Создаем новый config файл
@@ -48,8 +69,8 @@ if (Test-Path $SSH_CONFIG) {
     icacls $SSH_CONFIG /inheritance:r /grant:r "${env:USERNAME}:F" | Out-Null
 }
 
-# Настройка SSH для использования правильного ключа
-$env:GIT_SSH_COMMAND = "ssh -i `"$SSH_KEY`" -o StrictHostKeyChecking=accept-new -o IdentitiesOnly=yes"
+# Настройка SSH для использования правильного ключа (будет переопределена в функции)
+$env:GIT_SSH_COMMAND = "ssh -i `"$SSH_KEY`" -o StrictHostKeyChecking=accept-new -o IdentitiesOnly=yes -o PreferredAuthentications=publickey"
 
 # Проверка наличия Git
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
@@ -60,7 +81,7 @@ if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
 # Функция для проверки SSH подключения
 function Test-SSHConnection {
     Write-Host "Проверка SSH подключения к серверу..." -ForegroundColor Gray
-    $testResult = ssh -i $SSH_KEY -o StrictHostKeyChecking=accept-new -o ConnectTimeout=5 $SERVER "echo 'SSH_OK'" 2>&1
+    $testResult = ssh -i $SSH_KEY -o StrictHostKeyChecking=accept-new -o ConnectTimeout=5 -o PreferredAuthentications=publickey -o PasswordAuthentication=no $SERVER "echo SSH_OK" 2>&1
     
     if ($LASTEXITCODE -eq 0 -and $testResult -match "SSH_OK") {
         Write-Host "✓ SSH подключение работает!" -ForegroundColor Green
@@ -225,18 +246,27 @@ function Deploy-ToServer {
     
     # Добавление remote если его нет
     $remotes = git remote
+    $remoteUrl = "$SERVER`:$WWW_ROOT"
+    
     if ($remotes -notcontains "production") {
         Write-Host "Добавление remote 'production'..." -ForegroundColor Yellow
-        Write-Host "  URL: $SERVER`:$WWW_ROOT" -ForegroundColor Gray
-        git remote add production "$SERVER`:$WWW_ROOT"
+        Write-Host "  URL: $remoteUrl" -ForegroundColor Gray
+        git remote add production $remoteUrl
         if ($LASTEXITCODE -ne 0) {
             Write-Host "ОШИБКА: Не удалось добавить remote 'production'!" -ForegroundColor Red
             throw "Не удалось добавить remote"
         }
     } else {
         # Обновляем URL remote на случай изменения
-        git remote set-url production "$SERVER`:$WWW_ROOT"
+        git remote set-url production $remoteUrl
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "ВНИМАНИЕ: Не удалось обновить remote URL" -ForegroundColor Yellow
+        }
     }
+    
+    # Проверяем текущий remote URL
+    $currentRemoteUrl = git remote get-url production 2>&1
+    Write-Host "Текущий remote URL: $currentRemoteUrl" -ForegroundColor Gray
     
     # Проверяем текущий коммит перед отправкой
     $currentCommit = git rev-parse HEAD
@@ -247,15 +277,43 @@ function Deploy-ToServer {
     Write-Host "Используется SSH ключ: $SSH_KEY" -ForegroundColor Gray
     
     # Выполняем push с явным указанием SSH команды
-    $sshCommand = "ssh -i `"$SSH_KEY`" -o StrictHostKeyChecking=accept-new -o IdentitiesOnly=yes -o UserKnownHostsFile=$env:USERPROFILE\.ssh\known_hosts"
-    $pushOutput = git -c core.sshCommand=$sshCommand push production main --force 2>&1
+    # Используем переменную окружения для Git SSH команды
+    $sshCmd = "ssh -i `"$SSH_KEY`" -o StrictHostKeyChecking=accept-new -o IdentitiesOnly=yes -o PreferredAuthentications=publickey -o PasswordAuthentication=no"
+    $env:GIT_SSH_COMMAND = $sshCmd
+    
+    Write-Host "Выполнение git push..." -ForegroundColor Gray
+    Write-Host "SSH команда: $sshCmd" -ForegroundColor Gray
+    
+    # Выполняем push с подробным выводом для отладки
+    $pushOutput = git push production main --force 2>&1
     $pushExitCode = $LASTEXITCODE
+    
+    # Очищаем переменную окружения
+    Remove-Item Env:\GIT_SSH_COMMAND -ErrorAction SilentlyContinue
+    
+    # Выводим полный вывод для отладки
+    if ($pushOutput) {
+        Write-Host "Вывод git push:" -ForegroundColor Cyan
+        Write-Host $pushOutput -ForegroundColor Gray
+    }
     
     if ($pushExitCode -ne 0) {
         Write-Host "ОШИБКА при отправке на сервер!" -ForegroundColor Red
         Write-Host "Вывод команды:" -ForegroundColor Yellow
         Write-Host $pushOutput -ForegroundColor Red
         Write-Host ""
+        
+        # Дополнительная диагностика
+        Write-Host "=== ДИАГНОСТИКА ===" -ForegroundColor Yellow
+        Write-Host "Проверка SSH подключения напрямую..." -ForegroundColor Gray
+        $sshTest = ssh -i $SSH_KEY -o ConnectTimeout=5 $SERVER "echo 'Direct SSH OK'" 2>&1
+        Write-Host "Результат прямого SSH: $sshTest" -ForegroundColor Gray
+        
+        Write-Host ""
+        Write-Host "Проверка Git репозитория на сервере..." -ForegroundColor Gray
+        $gitTest = ssh -i $SSH_KEY $SERVER "test -d $WWW_ROOT/.git && echo 'Git repo exists' || echo 'Git repo NOT found'" 2>&1
+        Write-Host "Результат проверки Git: $gitTest" -ForegroundColor Gray
+        
         Write-Host ""
         Write-Host "=== ИНСТРУКЦИЯ ПО ДОБАВЛЕНИЮ SSH КЛЮЧА НА СЕРВЕР ===" -ForegroundColor Yellow
         Write-Host ""
