@@ -177,13 +177,33 @@ function Deploy-ToServer {
     Write-Host "  Git репозиторий: $WWW_ROOT" -ForegroundColor Gray
     Write-Host "  Рабочая директория: $WWW_ROOT/public_html" -ForegroundColor Gray
     
-    $pushOutput = git push production main --force 2>&1
-    $pushExitCode = $LASTEXITCODE
+    # Выполняем push с подробным выводом для отслеживания hook
+    Write-Host "Выполнение git push..." -ForegroundColor Gray
+    
+    # Захватываем вывод команды
+    $pushOutput = ""
+    $pushError = ""
+    
+    try {
+        # Выполняем push и захватываем весь вывод
+        $pushOutput = git push production main --force 2>&1 | Out-String
+        $pushExitCode = $LASTEXITCODE
+    } catch {
+        $pushError = $_.Exception.Message
+        $pushExitCode = 1
+    }
+    
+    # Выводим результат push
+    if ($pushOutput) {
+        Write-Host "Вывод git push:" -ForegroundColor Cyan
+        Write-Host $pushOutput -ForegroundColor Gray
+    }
     
     if ($pushExitCode -ne 0) {
         Write-Host "ОШИБКА при отправке на сервер!" -ForegroundColor Red
-        Write-Host "Вывод команды:" -ForegroundColor Yellow
-        Write-Host $pushOutput -ForegroundColor Red
+        if ($pushError) {
+            Write-Host "Ошибка: $pushError" -ForegroundColor Red
+        }
         Write-Host ""
         Write-Host "Проверьте:" -ForegroundColor Yellow
         Write-Host "  - SSH ключ настроен для доступа к серверу" -ForegroundColor Yellow
@@ -194,6 +214,66 @@ function Deploy-ToServer {
     }
     
     Write-Host "Отправка выполнена успешно." -ForegroundColor Green
+    
+    # Проверяем, что hook выполнился (ищем сообщения hook в выводе)
+    if ($pushOutput -match "Начало деплоя|Деплой завершен|checkout|Копирование") {
+        Write-Host "Git hook выполнен успешно (обнаружены сообщения hook)." -ForegroundColor Green
+    } else {
+        Write-Host "ВНИМАНИЕ: Не обнаружено подтверждение выполнения Git hook в выводе!" -ForegroundColor Yellow
+        Write-Host "Это может быть нормально, если hook выполняется в фоне." -ForegroundColor Yellow
+    }
+    
+    # Даем время hook выполниться
+    Write-Host "Ожидание завершения hook на сервере..." -ForegroundColor Gray
+    Start-Sleep -Seconds 3
+    
+    # Проверяем файлы на сервере
+    Write-Host "Проверка файлов на сервере..." -ForegroundColor Gray
+    try {
+        $checkFiles = ssh $SERVER "test -f $WWW_ROOT/public_html/index.html && echo 'OK' || echo 'NOT_FOUND'" 2>&1
+        if ($checkFiles -match "OK") {
+            Write-Host "Файл index.html найден на сервере." -ForegroundColor Green
+            
+            # Проверяем дату модификации файла
+            $fileDate = ssh $SERVER "stat -c '%y' $WWW_ROOT/public_html/index.html" 2>&1
+            if ($fileDate) {
+                Write-Host "Дата модификации index.html: $fileDate" -ForegroundColor Gray
+            }
+        } else {
+            Write-Host "ВНИМАНИЕ: Файл index.html не найден на сервере!" -ForegroundColor Yellow
+            Write-Host "Возможно hook не выполнился или произошла ошибка." -ForegroundColor Yellow
+            Write-Host ""
+            Write-Host "Пробуем альтернативный способ деплоя через SSH..." -ForegroundColor Yellow
+            
+            # Пытаемся выполнить деплой вручную через SSH
+            try {
+                Write-Host "Выполнение деплоя через SSH..." -ForegroundColor Gray
+                $sshDeploy = ssh $SERVER "cd $WWW_ROOT && export GIT_DIR=$WWW_ROOT/.git && export GIT_WORK_TREE=$WWW_ROOT && git checkout -f main && bash $WWW_ROOT/.git/hooks/post-receive" 2>&1
+                
+                if ($LASTEXITCODE -eq 0) {
+                    Write-Host "Альтернативный деплой выполнен успешно." -ForegroundColor Green
+                } else {
+                    Write-Host "Альтернативный деплой не удался. Вывод:" -ForegroundColor Yellow
+                    Write-Host $sshDeploy -ForegroundColor Gray
+                }
+            } catch {
+                Write-Host "Не удалось выполнить альтернативный деплой: $_" -ForegroundColor Yellow
+            }
+            
+            Write-Host ""
+            Write-Host "Диагностика:" -ForegroundColor Yellow
+            Write-Host "1. Проверьте наличие hook: ssh $SERVER 'ls -la $WWW_ROOT/.git/hooks/post-receive'" -ForegroundColor Cyan
+            Write-Host "2. Проверьте права на hook: ssh $SERVER 'test -x $WWW_ROOT/.git/hooks/post-receive && echo OK || echo NO_EXEC'" -ForegroundColor Cyan
+            Write-Host "3. Проверьте файлы в репозитории: ssh $SERVER 'ls -la $WWW_ROOT/'" -ForegroundColor Cyan
+            Write-Host "4. Проверьте настройки Git: ssh $SERVER 'cd $WWW_ROOT && git config receive.denyCurrentBranch'" -ForegroundColor Cyan
+            Write-Host "5. Выполните hook вручную: ssh $SERVER 'cd $WWW_ROOT && bash $WWW_ROOT/.git/hooks/post-receive'" -ForegroundColor Cyan
+        }
+    } catch {
+        Write-Host "Не удалось проверить файлы на сервере (это нормально, если SSH требует интерактивного ввода)." -ForegroundColor Yellow
+        Write-Host "Проверьте вручную через SSH:" -ForegroundColor Yellow
+        Write-Host "  ssh $SERVER" -ForegroundColor Cyan
+        Write-Host "  ls -la $WWW_ROOT/public_html/" -ForegroundColor Cyan
+    }
 }
 
 # Основная логика
