@@ -12,7 +12,7 @@ param(
 
 $SERVER = "root@45.153.70.209"
 $DOMAIN = "tg-text.ru"
-$WWW_ROOT = "/var/www/$DOMAIN/public_html"
+$WWW_ROOT = "/var/www/$DOMAIN"
 
 # Проверка наличия Git
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
@@ -174,7 +174,8 @@ function Deploy-ToServer {
     # Отправка на сервер
     Write-Host "Отправка на сервер..." -ForegroundColor Yellow
     Write-Host "  Сервер: $SERVER" -ForegroundColor Gray
-    Write-Host "  Путь: $WWW_ROOT" -ForegroundColor Gray
+    Write-Host "  Git репозиторий: $WWW_ROOT" -ForegroundColor Gray
+    Write-Host "  Рабочая директория: $WWW_ROOT/public_html" -ForegroundColor Gray
     
     $pushOutput = git push production main --force 2>&1
     $pushExitCode = $LASTEXITCODE
@@ -186,8 +187,8 @@ function Deploy-ToServer {
         Write-Host ""
         Write-Host "Проверьте:" -ForegroundColor Yellow
         Write-Host "  - SSH ключ настроен для доступа к серверу" -ForegroundColor Yellow
-        Write-Host "  - Путь на сервере правильный: $WWW_ROOT" -ForegroundColor Yellow
-        Write-Host "  - Git репозиторий на сервере инициализирован" -ForegroundColor Yellow
+        Write-Host "  - Git репозиторий на сервере: $WWW_ROOT/.git" -ForegroundColor Yellow
+        Write-Host "  - Git hook post-receive установлен: $WWW_ROOT/.git/hooks/post-receive" -ForegroundColor Yellow
         Write-Host "  - Права доступа к директории на сервере" -ForegroundColor Yellow
         throw "Ошибка git push (код выхода: $pushExitCode)"
     }
