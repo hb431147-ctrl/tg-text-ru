@@ -274,8 +274,19 @@ function Deploy-ToServer {
         Write-Host "4. Проверьте подключение:" -ForegroundColor Cyan
         Write-Host "   ssh -i $SSH_KEY root@45.153.70.209 'echo Connection OK'" -ForegroundColor White
         Write-Host ""
-        Write-Host "5. После добавления ключа запустите деплой снова:" -ForegroundColor Cyan
+        Write-Host "5. Или запустите автоматическое добавление ключа:" -ForegroundColor Cyan
+        Write-Host "   .\add_ssh_key.ps1" -ForegroundColor White
+        Write-Host ""
+        Write-Host "6. После добавления ключа запустите деплой снова:" -ForegroundColor Cyan
         Write-Host "   .\deploy.ps1" -ForegroundColor White
+        
+        # Пробуем автоматически добавить ключ
+        if (Test-Path ".\add_ssh_key.ps1") {
+            Write-Host ""
+            Write-Host "Попытка автоматически добавить ключ..." -ForegroundColor Yellow
+            & ".\add_ssh_key.ps1"
+        }
+        
         throw "Ошибка git push"
     }
     
