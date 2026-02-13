@@ -78,6 +78,9 @@ function Rollback-Back {
         # Отправляем изменения на сервер
         Deploy-ToServer
         
+        # Отправляем изменения в GitHub
+        Deploy-ToGitHub
+        
         Write-Host "=== Откат завершен успешно! ===" -ForegroundColor Green
         Write-Host "Проверьте сайт: https://$DOMAIN" -ForegroundColor Cyan
     } catch {
@@ -142,6 +145,9 @@ function Rollback-Forward {
         # Отправляем изменения на сервер
         Deploy-ToServer
         
+        # Отправляем изменения в GitHub
+        Deploy-ToGitHub
+        
         Write-Host "=== Откат завершен успешно! ===" -ForegroundColor Green
         Write-Host "Проверьте сайт: https://$DOMAIN" -ForegroundColor Cyan
     } catch {
@@ -173,152 +179,64 @@ function Deploy-ToServer {
     
     # Отправка на сервер
     Write-Host "Отправка на сервер..." -ForegroundColor Yellow
-    Write-Host "  Сервер: $SERVER" -ForegroundColor Gray
-    Write-Host "  Git репозиторий: $WWW_ROOT" -ForegroundColor Gray
-    Write-Host "  Рабочая директория: $WWW_ROOT/public_html" -ForegroundColor Gray
+    git push production main --force 2>&1 | Out-Null
     
-    # Выполняем push с подробным выводом для отслеживания hook
-    Write-Host "Выполнение git push..." -ForegroundColor Gray
-    
-    # Захватываем вывод команды
-    $pushOutput = ""
-    $pushError = ""
-    
-    try {
-        # Выполняем push и захватываем весь вывод
-        $pushOutput = git push production main --force 2>&1 | Out-String
-        $pushExitCode = $LASTEXITCODE
-    } catch {
-        $pushError = $_.Exception.Message
-        $pushExitCode = 1
-    }
-    
-    # Выводим результат push
-    if ($pushOutput) {
-        Write-Host "Вывод git push:" -ForegroundColor Cyan
-        Write-Host $pushOutput -ForegroundColor Gray
-    }
-    
-    if ($pushExitCode -ne 0) {
+    if ($LASTEXITCODE -ne 0) {
         Write-Host "ОШИБКА при отправке на сервер!" -ForegroundColor Red
-        if ($pushError) {
-            Write-Host "Ошибка: $pushError" -ForegroundColor Red
-        }
-        Write-Host ""
-        Write-Host "Проверьте:" -ForegroundColor Yellow
-        Write-Host "  - SSH ключ настроен для доступа к серверу" -ForegroundColor Yellow
-        Write-Host "  - Git репозиторий на сервере: $WWW_ROOT/.git" -ForegroundColor Yellow
-        Write-Host "  - Git hook post-receive установлен: $WWW_ROOT/.git/hooks/post-receive" -ForegroundColor Yellow
-        Write-Host "  - Права доступа к директории на сервере" -ForegroundColor Yellow
-        throw "Ошибка git push (код выхода: $pushExitCode)"
+        Write-Host "Проверьте SSH ключ и доступ к серверу." -ForegroundColor Yellow
+        throw "Ошибка git push"
     }
     
     Write-Host "Отправка выполнена успешно." -ForegroundColor Green
     
-    # Проверяем, что hook выполнился (ищем сообщения hook в выводе)
-    $hookExecuted = $false
-    if ($pushOutput -match "Начало деплоя|Деплой завершен|checkout|Копирование") {
-        Write-Host "Git hook выполнен успешно (обнаружены сообщения hook)." -ForegroundColor Green
-        $hookExecuted = $true
+    # Выполняем деплой через SSH (hook не выполняется автоматически при push в обычный репозиторий)
+    Write-Host "Выполнение деплоя на сервере..." -ForegroundColor Gray
+    $deployCmd = "cd $WWW_ROOT && mkdir -p $WWW_ROOT/staging && export GIT_DIR=$WWW_ROOT/.git && export GIT_WORK_TREE=$WWW_ROOT/staging && git checkout -f main && unset GIT_DIR && unset GIT_WORK_TREE && rsync -av --delete --include='index.html' --include='*.html' --include='*.css' --include='*.js' --include='*.jpg' --include='*.jpeg' --include='*.png' --include='*.gif' --include='*.svg' --include='*.ico' --include='*.woff' --include='*.woff2' --include='*.ttf' --include='*.eot' --exclude='deploy.ps1' --exclude='nginx_*.conf' --exclude='post-receive' --exclude='README.md' --exclude='DEPLOY_GUIDE.md' --exclude='SSL/' --exclude='*.sh' --exclude='*' $WWW_ROOT/staging/ $WWW_ROOT/public_html/ 2>/dev/null || cp $WWW_ROOT/staging/index.html $WWW_ROOT/public_html/ 2>/dev/null || true && chown -R http:http $WWW_ROOT/public_html && chmod -R 755 $WWW_ROOT/public_html && rm -rf $WWW_ROOT/staging"
+    $deployResult = ssh $SERVER $deployCmd 2>&1
+    
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "Деплой на сервере выполнен успешно." -ForegroundColor Green
     } else {
-        Write-Host "Не обнаружено подтверждение выполнения Git hook в выводе." -ForegroundColor Yellow
-        Write-Host "Выполняем hook вручную через SSH для гарантии деплоя..." -ForegroundColor Yellow
+        Write-Host "ВНИМАНИЕ: Деплой выполнился с ошибкой!" -ForegroundColor Yellow
+        Write-Host $deployResult -ForegroundColor Yellow
     }
+}
+
+# Функция для отправки в GitHub
+function Deploy-ToGitHub {
+    Write-Host "Отправка изменений в GitHub..." -ForegroundColor Yellow
     
-    # Всегда выполняем деплой через SSH для гарантии (на случай если hook не выполнился автоматически)
-    if (-not $hookExecuted) {
-        Write-Host "Выполнение деплоя через SSH (гарантированный способ)..." -ForegroundColor Gray
-        try {
-            # Получаем текущий коммит для передачи в hook
-            $newRev = ssh $SERVER "cd $WWW_ROOT && git rev-parse HEAD" 2>&1
-            $oldRev = ssh $SERVER "cd $WWW_ROOT && git rev-parse HEAD@{1} 2>/dev/null || echo '0000000000000000000000000000000000000000'" 2>&1
-            
-            # Выполняем hook с правильной передачей данных через stdin
-            # Используем printf для правильной передачи данных
-            $hookCommand = "cd $WWW_ROOT && printf '%s %s refs/heads/main\n' '$oldRev' '$newRev' | bash $WWW_ROOT/.git/hooks/post-receive"
-            $hookResult = ssh $SERVER $hookCommand 2>&1
-            
-            if ($LASTEXITCODE -eq 0) {
-                Write-Host "Деплой выполнен успешно через SSH." -ForegroundColor Green
-                if ($hookResult -and $hookResult.Trim()) {
-                    Write-Host "Вывод hook:" -ForegroundColor Gray
-                    Write-Host $hookResult -ForegroundColor Gray
-                }
-            } else {
-                Write-Host "ВНИМАНИЕ: Деплой через SSH выполнился с ошибкой!" -ForegroundColor Yellow
-                Write-Host "Вывод:" -ForegroundColor Yellow
-                Write-Host $hookResult -ForegroundColor Yellow
-                Write-Host ""
-                Write-Host "Пробуем упрощенный способ деплоя..." -ForegroundColor Yellow
-                
-                # Упрощенный способ - выполняем команды из hook напрямую
-                # Делаем checkout в staging, затем копируем в public_html
-                $simpleDeployCmd = "cd $WWW_ROOT && mkdir -p $WWW_ROOT/staging && export GIT_DIR=$WWW_ROOT/.git && export GIT_WORK_TREE=$WWW_ROOT/staging && git checkout -f main && unset GIT_DIR && unset GIT_WORK_TREE && rsync -av --delete --include='index.html' --include='*.html' --include='*.css' --include='*.js' --include='*.jpg' --include='*.jpeg' --include='*.png' --include='*.gif' --include='*.svg' --include='*.ico' --include='*.woff' --include='*.woff2' --include='*.ttf' --include='*.eot' --exclude='deploy.ps1' --exclude='nginx_*.conf' --exclude='post-receive' --exclude='README.md' --exclude='DEPLOY_GUIDE.md' --exclude='SSL/' --exclude='*.sh' --exclude='*' $WWW_ROOT/staging/ $WWW_ROOT/public_html/ 2>/dev/null || cp $WWW_ROOT/staging/index.html $WWW_ROOT/public_html/ 2>/dev/null || true && chown -R http:http $WWW_ROOT/public_html && chmod -R 755 $WWW_ROOT/public_html && rm -rf $WWW_ROOT/staging"
-                $simpleDeploy = ssh $SERVER $simpleDeployCmd 2>&1
-                
-                if ($LASTEXITCODE -eq 0) {
-                    Write-Host "Упрощенный деплой выполнен успешно." -ForegroundColor Green
-                } else {
-                    Write-Host "Упрощенный деплой также не удался." -ForegroundColor Red
-                    Write-Host "Вывод:" -ForegroundColor Yellow
-                    Write-Host $simpleDeploy -ForegroundColor Yellow
-                }
-            }
-        } catch {
-            Write-Host "Не удалось выполнить деплой через SSH: $_" -ForegroundColor Yellow
+    # Проверяем наличие remote для GitHub
+    $remotes = git remote
+    $githubRemote = $null
+    
+    # Ищем существующий GitHub remote
+    foreach ($remote in $remotes) {
+        $url = git remote get-url $remote 2>&1
+        if ($url -match "github.com.*tg-text-ru") {
+            $githubRemote = $remote
+            break
         }
     }
     
-    # Даем время для завершения операций
-    Write-Host "Ожидание завершения операций на сервере..." -ForegroundColor Gray
-    Start-Sleep -Seconds 2
-    
-    # Проверяем файлы на сервере
-    Write-Host "Проверка файлов на сервере..." -ForegroundColor Gray
-    try {
-        $checkFiles = ssh $SERVER "test -f $WWW_ROOT/public_html/index.html && echo 'OK' || echo 'NOT_FOUND'" 2>&1
-        if ($checkFiles -match "OK") {
-            Write-Host "Файл index.html найден на сервере." -ForegroundColor Green
-            
-            # Проверяем дату модификации файла
-            $fileDate = ssh $SERVER "stat -c '%y' $WWW_ROOT/public_html/index.html" 2>&1
-            if ($fileDate) {
-                Write-Host "Дата модификации index.html: $fileDate" -ForegroundColor Gray
-            }
+    # Если нет GitHub remote, добавляем origin
+    if (-not $githubRemote) {
+        $githubUrl = "https://github.com/hb431147-ctrl/tg-text-ru.git"
+        if ($remotes -contains "origin") {
+            git remote set-url origin $githubUrl 2>&1 | Out-Null
         } else {
-            Write-Host "ВНИМАНИЕ: Файл index.html не найден на сервере!" -ForegroundColor Yellow
-            Write-Host "Возможно hook не выполнился или произошла ошибка." -ForegroundColor Yellow
-            Write-Host ""
-            Write-Host "Пробуем альтернативный способ деплоя через SSH..." -ForegroundColor Yellow
-            
-            # Пытаемся выполнить деплой вручную через SSH
-            try {
-                Write-Host "Выполнение деплоя через SSH..." -ForegroundColor Gray
-                $sshDeploy = ssh $SERVER "cd $WWW_ROOT && export GIT_DIR=$WWW_ROOT/.git && export GIT_WORK_TREE=$WWW_ROOT && git checkout -f main && bash $WWW_ROOT/.git/hooks/post-receive" 2>&1
-                
-                if ($LASTEXITCODE -eq 0) {
-                    Write-Host "Альтернативный деплой выполнен успешно." -ForegroundColor Green
-                } else {
-                    Write-Host "Альтернативный деплой не удался. Вывод:" -ForegroundColor Yellow
-                    Write-Host $sshDeploy -ForegroundColor Gray
-                }
-            } catch {
-                Write-Host "Не удалось выполнить альтернативный деплой: $_" -ForegroundColor Yellow
-            }
-            
-            Write-Host ""
-            Write-Host "Диагностика:" -ForegroundColor Yellow
-            Write-Host "1. Проверьте наличие hook: ssh $SERVER 'ls -la $WWW_ROOT/.git/hooks/post-receive'" -ForegroundColor Cyan
-            Write-Host "2. Проверьте права на hook: ssh $SERVER 'test -x $WWW_ROOT/.git/hooks/post-receive && echo OK || echo NO_EXEC'" -ForegroundColor Cyan
-            Write-Host "3. Проверьте файлы в репозитории: ssh $SERVER 'ls -la $WWW_ROOT/'" -ForegroundColor Cyan
-            Write-Host "4. Проверьте настройки Git: ssh $SERVER 'cd $WWW_ROOT && git config receive.denyCurrentBranch'" -ForegroundColor Cyan
-            Write-Host "5. Выполните hook вручную: ssh $SERVER 'cd $WWW_ROOT && bash $WWW_ROOT/.git/hooks/post-receive'" -ForegroundColor Cyan
+            git remote add origin $githubUrl 2>&1 | Out-Null
         }
-    } catch {
-        Write-Host "Не удалось проверить файлы на сервере (это нормально, если SSH требует интерактивного ввода)." -ForegroundColor Yellow
-        Write-Host "Проверьте вручную через SSH:" -ForegroundColor Yellow
-        Write-Host "  ssh $SERVER" -ForegroundColor Cyan
-        Write-Host "  ls -la $WWW_ROOT/public_html/" -ForegroundColor Cyan
+        $githubRemote = "origin"
+    }
+    
+    # Отправляем в GitHub
+    git push $githubRemote main 2>&1 | Out-Null
+    
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "Изменения отправлены в GitHub." -ForegroundColor Green
+    } else {
+        Write-Host "ВНИМАНИЕ: Не удалось отправить в GitHub (проверьте аутентификацию)." -ForegroundColor Yellow
     }
 }
 
@@ -382,7 +300,9 @@ if ([string]::IsNullOrWhiteSpace($status)) {
 # Отправка на сервер
 Deploy-ToServer
 
+# Отправка в GitHub после успешного деплоя на сервер
+Deploy-ToGitHub
+
 Write-Host "=== Деплой завершен успешно! ===" -ForegroundColor Green
-Write-Host "Проверьте сайт: https://$DOMAIN" -ForegroundColor Cyan
 
 
