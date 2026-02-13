@@ -177,3 +177,132 @@ input[type="text"] {
     font-style: italic;
 }
 
+.history-section {
+    margin-top: 40px;
+    text-align: left;
+    border-top: 2px solid #e0e0e0;
+    padding-top: 30px;
+}
+
+.history-section h2 {
+    color: #333;
+    font-size: 1.8em;
+    margin-bottom: 15px;
+    text-align: center;
+}
+
+.btn-secondary {
+    background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+    margin-bottom: 20px;
+}
+
+.history-container {
+    margin-top: 20px;
+}
+
+.loading, .no-history, .error {
+    text-align: center;
+    padding: 20px;
+    color: #666;
+    font-style: italic;
+}
+
+.error {
+    color: #e53e3e;
+}
+
+.history-info {
+    background: #f0f4ff;
+    padding: 10px 15px;
+    border-radius: 8px;
+    margin-bottom: 15px;
+    font-weight: 600;
+    color: #667eea;
+    text-align: center;
+}
+
+.history-list {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    max-height: 500px;
+    overflow-y: auto;
+    padding-right: 5px;
+}
+
+.history-item {
+    background: #f8f9fa;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 15px;
+    transition: box-shadow 0.2s;
+}
+
+.history-item:hover {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.history-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+.history-number {
+    font-weight: 600;
+    color: #667eea;
+    font-size: 0.9em;
+}
+
+.history-date {
+    color: #666;
+    font-size: 0.85em;
+}
+
+.history-content {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.history-field {
+    color: #333;
+    font-size: 0.95em;
+    line-height: 1.5;
+    word-wrap: break-word;
+}
+
+.history-field strong {
+    color: #555;
+    margin-right: 5px;
+}
+
+.result-field {
+    background: #e6ffed;
+    padding: 8px;
+    border-radius: 4px;
+    border-left: 3px solid #48bb78;
+}
+
+/* Скроллбар для истории */
+.history-list::-webkit-scrollbar {
+    width: 8px;
+}
+
+.history-list::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+}
+
+.history-list::-webkit-scrollbar-thumb {
+    background: #667eea;
+    border-radius: 4px;
+}
+
+.history-list::-webkit-scrollbar-thumb:hover {
+    background: #764ba2;
+}
+

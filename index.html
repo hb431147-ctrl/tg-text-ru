@@ -30,6 +30,14 @@
                 <div class="result-text" id="resultText"></div>
             </div>
         </div>
+        
+        <div class="history-section">
+            <h2>История запросов</h2>
+            <button class="btn btn-secondary" onclick="loadHistory()">Обновить историю</button>
+            <div id="historyContainer" class="history-container">
+                <div class="loading">Загрузка истории...</div>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -102,6 +110,9 @@
                 resultText.textContent = data.result || 'Результат пуст';
                 resultDiv.classList.add('show');
                 
+                // Автоматически обновляем историю после успешной обработки
+                loadHistory();
+                
             } catch (error) {
                 console.error('Ошибка:', error);
                 console.error('Stack:', error.stack);
@@ -134,6 +145,77 @@
                 e.preventDefault();
                 processText();
             }
+        });
+        
+        // Функция загрузки истории запросов из MySQL
+        async function loadHistory() {
+            const historyContainer = document.getElementById('historyContainer');
+            historyContainer.innerHTML = '<div class="loading">Загрузка истории...</div>';
+            
+            try {
+                const apiUrl = (window.location.protocol === 'file:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+                    ? 'https://tg-text.ru/api/history'
+                    : '/api/history';
+                
+                const response = await fetch(apiUrl, {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json'
+                    }
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`Ошибка ${response.status}: ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                
+                if (!data.requests || data.requests.length === 0) {
+                    historyContainer.innerHTML = '<div class="no-history">История запросов пуста</div>';
+                    return;
+                }
+                
+                let html = `<div class="history-info">Всего запросов: ${data.total}</div>`;
+                html += '<div class="history-list">';
+                
+                data.requests.forEach((request, index) => {
+                    const date = new Date(request.created_at).toLocaleString('ru-RU');
+                    html += `
+                        <div class="history-item">
+                            <div class="history-header">
+                                <span class="history-number">#${data.total - index - data.offset}</span>
+                                <span class="history-date">${date}</span>
+                            </div>
+                            <div class="history-content">
+                                <div class="history-field">
+                                    <strong>Запрос:</strong> ${escapeHtml(request.request_text.substring(0, 100))}${request.request_text.length > 100 ? '...' : ''}
+                                </div>
+                                ${request.exclude_words ? `<div class="history-field"><strong>Исключено:</strong> ${escapeHtml(request.exclude_words)}</div>` : ''}
+                                ${request.result_text ? `<div class="history-field result-field"><strong>Результат:</strong> ${escapeHtml(request.result_text.substring(0, 100))}${request.result_text.length > 100 ? '...' : ''}</div>` : ''}
+                            </div>
+                        </div>
+                    `;
+                });
+                
+                html += '</div>';
+                historyContainer.innerHTML = html;
+                
+            } catch (error) {
+                console.error('Ошибка загрузки истории:', error);
+                historyContainer.innerHTML = `<div class="error">Ошибка загрузки истории: ${error.message}</div>`;
+            }
+        }
+        
+        // Функция экранирования HTML
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        // Загружаем историю при загрузке страницы
+        window.addEventListener('DOMContentLoaded', function() {
+            loadHistory();
         });
     </script>
 </body>
