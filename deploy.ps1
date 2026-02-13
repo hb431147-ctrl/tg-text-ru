@@ -81,16 +81,26 @@ if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
 # Функция для проверки SSH подключения
 function Test-SSHConnection {
     Write-Host "Проверка SSH подключения к серверу..." -ForegroundColor Gray
-    $testResult = ssh -i $SSH_KEY -o StrictHostKeyChecking=accept-new -o ConnectTimeout=5 -o PreferredAuthentications=publickey -o PasswordAuthentication=no $SERVER "echo SSH_OK" 2>&1
+    
+    # Пробуем несколько вариантов подключения
+    $testResult = ssh -i $SSH_KEY -o StrictHostKeyChecking=accept-new -o ConnectTimeout=5 $SERVER "echo SSH_OK" 2>&1
     
     if ($LASTEXITCODE -eq 0 -and $testResult -match "SSH_OK") {
         Write-Host "✓ SSH подключение работает!" -ForegroundColor Green
         return $true
-    } else {
-        Write-Host "✗ SSH подключение не работает!" -ForegroundColor Red
-        Write-Host "Вывод: $testResult" -ForegroundColor Yellow
-        return $false
     }
+    
+    # Пробуем без указания ключа (используя SSH config)
+    $testResult2 = ssh -o ConnectTimeout=5 $SERVER "echo SSH_OK" 2>&1
+    if ($LASTEXITCODE -eq 0 -and $testResult2 -match "SSH_OK") {
+        Write-Host "✓ SSH подключение работает (через SSH config)!" -ForegroundColor Green
+        return $true
+    }
+    
+    Write-Host "✗ Прямое SSH подключение не работает" -ForegroundColor Yellow
+    Write-Host "Вывод: $testResult" -ForegroundColor Gray
+    Write-Host "Это может быть нормально, если Git использует другой способ подключения" -ForegroundColor Gray
+    return $false
 }
 
 # Функция для получения текущего коммита
@@ -231,17 +241,12 @@ function Rollback-Forward {
 
 # Функция для отправки на сервер
 function Deploy-ToServer {
-    # Проверяем SSH подключение перед деплоем
-    if (-not (Test-SSHConnection)) {
+    # Проверяем SSH подключение перед деплоем (не блокируем деплой, только предупреждаем)
+    $sshWorks = Test-SSHConnection
+    if (-not $sshWorks) {
         Write-Host ""
-        Write-Host "ВНИМАНИЕ: SSH подключение не работает!" -ForegroundColor Yellow
-        Write-Host "Деплой будет продолжен, но может завершиться ошибкой." -ForegroundColor Yellow
-        Write-Host "Рекомендуется сначала настроить SSH ключ (см. инструкции ниже)." -ForegroundColor Yellow
-        Write-Host ""
-        $continue = Read-Host "Продолжить деплой? (y/n)"
-        if ($continue -ne "y" -and $continue -ne "Y") {
-            throw "Деплой отменен пользователем"
-        }
+        Write-Host "ВНИМАНИЕ: Прямое SSH подключение не работает, но деплой будет продолжен." -ForegroundColor Yellow
+        Write-Host "Git может использовать другой способ подключения." -ForegroundColor Gray
     }
     
     # Добавление remote если его нет
@@ -278,15 +283,23 @@ function Deploy-ToServer {
     
     # Выполняем push с явным указанием SSH команды
     # Используем переменную окружения для Git SSH команды
-    $sshCmd = "ssh -i `"$SSH_KEY`" -o StrictHostKeyChecking=accept-new -o IdentitiesOnly=yes -o PreferredAuthentications=publickey -o PasswordAuthentication=no"
-    $env:GIT_SSH_COMMAND = $sshCmd
+    # Пробуем несколько вариантов SSH команды
     
-    Write-Host "Выполнение git push..." -ForegroundColor Gray
-    Write-Host "SSH команда: $sshCmd" -ForegroundColor Gray
+    # Вариант 1: С явным указанием ключа
+    $sshCmd1 = "ssh -i `"$SSH_KEY`" -o StrictHostKeyChecking=accept-new -o IdentitiesOnly=yes"
+    $env:GIT_SSH_COMMAND = $sshCmd1
     
-    # Выполняем push с подробным выводом для отладки
+    Write-Host "Выполнение git push (вариант 1: с явным ключом)..." -ForegroundColor Gray
     $pushOutput = git push production main --force 2>&1
     $pushExitCode = $LASTEXITCODE
+    
+    # Если не сработало, пробуем через SSH config
+    if ($pushExitCode -ne 0) {
+        Write-Host "Попытка через SSH config..." -ForegroundColor Yellow
+        Remove-Item Env:\GIT_SSH_COMMAND -ErrorAction SilentlyContinue
+        $pushOutput = git push production main --force 2>&1
+        $pushExitCode = $LASTEXITCODE
+    }
     
     # Очищаем переменную окружения
     Remove-Item Env:\GIT_SSH_COMMAND -ErrorAction SilentlyContinue
