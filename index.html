@@ -175,28 +175,28 @@
                 }
                 
                 let html = `<div class="history-info">Всего запросов: ${data.total}</div>`;
-                html += '<div class="history-list">';
+                html += '<table class="history-table">';
+                html += '<thead><tr><th>№</th><th>Дата и время</th><th>Запрос</th><th>Исключено</th><th>Результат</th></tr></thead>';
+                html += '<tbody>';
                 
                 data.requests.forEach((request, index) => {
                     const date = new Date(request.created_at).toLocaleString('ru-RU');
+                    const requestText = escapeHtml(request.request_text);
+                    const excludeWords = request.exclude_words ? escapeHtml(request.exclude_words) : '-';
+                    const resultText = request.result_text ? escapeHtml(request.result_text) : '-';
+                    
                     html += `
-                        <div class="history-item">
-                            <div class="history-header">
-                                <span class="history-number">#${data.total - index - data.offset}</span>
-                                <span class="history-date">${date}</span>
-                            </div>
-                            <div class="history-content">
-                                <div class="history-field">
-                                    <strong>Запрос:</strong> ${escapeHtml(request.request_text.substring(0, 100))}${request.request_text.length > 100 ? '...' : ''}
-                                </div>
-                                ${request.exclude_words ? `<div class="history-field"><strong>Исключено:</strong> ${escapeHtml(request.exclude_words)}</div>` : ''}
-                                ${request.result_text ? `<div class="history-field result-field"><strong>Результат:</strong> ${escapeHtml(request.result_text.substring(0, 100))}${request.result_text.length > 100 ? '...' : ''}</div>` : ''}
-                            </div>
-                        </div>
+                        <tr>
+                            <td class="history-number">#${data.total - index - data.offset}</td>
+                            <td class="history-date">${date}</td>
+                            <td class="history-request">${requestText}</td>
+                            <td class="history-exclude">${excludeWords}</td>
+                            <td class="history-result">${resultText}</td>
+                        </tr>
                     `;
                 });
                 
-                html += '</div>';
+                html += '</tbody></table>';
                 historyContainer.innerHTML = html;
                 
             } catch (error) {
