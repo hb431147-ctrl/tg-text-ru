@@ -14,6 +14,19 @@ $SERVER = "root@45.153.70.209"
 $DOMAIN = "tg-text.ru"
 $WWW_ROOT = "/var/www/$DOMAIN"
 
+# Путь к SSH ключу
+$SSH_KEY = "$env:USERPROFILE\.ssh\id_rsa"
+
+# Проверка наличия SSH ключа
+if (-not (Test-Path $SSH_KEY)) {
+    Write-Host "ОШИБКА: SSH ключ не найден: $SSH_KEY" -ForegroundColor Red
+    Write-Host "Создайте ключ: ssh-keygen -t rsa -f $SSH_KEY" -ForegroundColor Yellow
+    exit 1
+}
+
+# Настройка SSH для использования правильного ключа
+$env:GIT_SSH_COMMAND = "ssh -i `"$SSH_KEY`" -o StrictHostKeyChecking=accept-new"
+
 # Проверка наличия Git
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
     Write-Host "ОШИБКА: Git не установлен!" -ForegroundColor Red
@@ -179,11 +192,26 @@ function Deploy-ToServer {
     
     # Отправка на сервер
     Write-Host "Отправка на сервер..." -ForegroundColor Yellow
-    git push production main --force 2>&1 | Out-Null
+    Write-Host "Используется SSH ключ: $SSH_KEY" -ForegroundColor Gray
     
-    if ($LASTEXITCODE -ne 0) {
+    # Выполняем push с явным указанием SSH команды
+    $pushOutput = git -c core.sshCommand="ssh -i `"$SSH_KEY`" -o StrictHostKeyChecking=accept-new" push production main --force 2>&1
+    $pushExitCode = $LASTEXITCODE
+    
+    if ($pushExitCode -ne 0) {
         Write-Host "ОШИБКА при отправке на сервер!" -ForegroundColor Red
-        Write-Host "Проверьте SSH ключ и доступ к серверу." -ForegroundColor Yellow
+        Write-Host "Вывод команды:" -ForegroundColor Yellow
+        Write-Host $pushOutput -ForegroundColor Red
+        Write-Host ""
+        Write-Host "Проверьте:" -ForegroundColor Yellow
+        Write-Host "  1. SSH ключ добавлен на сервер: $SSH_KEY.pub" -ForegroundColor Yellow
+        Write-Host "  2. Публичный ключ добавлен в ~/.ssh/authorized_keys на сервере" -ForegroundColor Yellow
+        Write-Host "  3. Права на ключ: icacls `"$SSH_KEY`" /inheritance:r /grant:r `"$env:USERNAME:R`"" -ForegroundColor Yellow
+        Write-Host ""
+        Write-Host "Для добавления ключа на сервер выполните:" -ForegroundColor Cyan
+        Write-Host "  type $SSH_KEY.pub" -ForegroundColor Cyan
+        Write-Host "  Скопируйте вывод и на сервере выполните:" -ForegroundColor Cyan
+        Write-Host "    mkdir -p ~/.ssh && echo 'ваш_ключ' >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys" -ForegroundColor Cyan
         throw "Ошибка git push"
     }
     
@@ -192,7 +220,7 @@ function Deploy-ToServer {
     # Выполняем деплой через SSH (hook не выполняется автоматически при push в обычный репозиторий)
     Write-Host "Выполнение деплоя на сервере..." -ForegroundColor Gray
     $deployCmd = "cd $WWW_ROOT && mkdir -p $WWW_ROOT/staging && export GIT_DIR=$WWW_ROOT/.git && export GIT_WORK_TREE=$WWW_ROOT/staging && git checkout -f main && unset GIT_DIR && unset GIT_WORK_TREE && rsync -av --delete --include='index.html' --include='*.html' --include='*.css' --include='*.js' --include='*.jpg' --include='*.jpeg' --include='*.png' --include='*.gif' --include='*.svg' --include='*.ico' --include='*.woff' --include='*.woff2' --include='*.ttf' --include='*.eot' --exclude='deploy.ps1' --exclude='nginx_*.conf' --exclude='post-receive' --exclude='README.md' --exclude='DEPLOY_GUIDE.md' --exclude='SSL/' --exclude='*.sh' --exclude='*' $WWW_ROOT/staging/ $WWW_ROOT/public_html/ 2>/dev/null || cp $WWW_ROOT/staging/index.html $WWW_ROOT/public_html/ 2>/dev/null || true && chown -R http:http $WWW_ROOT/public_html && chmod -R 755 $WWW_ROOT/public_html && rm -rf $WWW_ROOT/staging"
-    $deployResult = ssh $SERVER $deployCmd 2>&1
+    $deployResult = ssh -i $SSH_KEY -o StrictHostKeyChecking=accept-new $SERVER $deployCmd 2>&1
     
     if ($LASTEXITCODE -eq 0) {
         Write-Host "Деплой на сервере выполнен успешно." -ForegroundColor Green
