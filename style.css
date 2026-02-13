@@ -191,10 +191,6 @@ input[type="text"] {
     text-align: center;
 }
 
-.btn-secondary {
-    background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
-    margin-bottom: 20px;
-}
 
 .history-container {
     margin-top: 20px;
