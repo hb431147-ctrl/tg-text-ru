@@ -24,7 +24,7 @@ if ($remotes -notcontains "production") {
 
 # Получаем текущий коммит на сервере
 Write-Host "Проверка текущей версии на сервере..." -ForegroundColor Yellow
-$currentCommit = ssh "$SERVER" "cd $WWW_ROOT && git rev-parse HEAD" 2>&1
+$currentCommit = ssh "$SERVER" "cd $WWW_ROOT; git rev-parse HEAD" 2>&1
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "ОШИБКА: Не удалось подключиться к серверу или получить информацию о коммите" -ForegroundColor Red
@@ -35,7 +35,7 @@ Write-Host "Текущий коммит на сервере: $currentCommit" -Fo
 
 # Получаем предыдущий коммит
 Write-Host "Получение предыдущего коммита..." -ForegroundColor Yellow
-$previousCommit = ssh "$SERVER" "cd $WWW_ROOT && git rev-parse HEAD~1" 2>&1
+$previousCommit = ssh "$SERVER" "cd $WWW_ROOT; git rev-parse HEAD~1" 2>&1
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "ОШИБКА: Не удалось получить предыдущий коммит. Возможно, это первый коммит." -ForegroundColor Red
@@ -144,7 +144,7 @@ if ($LASTEXITCODE -eq 0) {
     Write-Host "Проверьте сайт: https://$DOMAIN" -ForegroundColor Cyan
     
     # Показываем информацию о текущем коммите
-    $newCommit = ssh "$SERVER" "cd $WWW_ROOT && git rev-parse HEAD && git log -1 --oneline"
+    $newCommit = ssh "$SERVER" "cd $WWW_ROOT; git rev-parse HEAD; git log -1 --oneline"
     Write-Host "Текущий коммит на сервере:" -ForegroundColor Cyan
     Write-Host $newCommit -ForegroundColor White
 } else {

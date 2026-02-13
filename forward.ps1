@@ -24,7 +24,7 @@ if ($remotes -notcontains "production") {
 
 # Получаем текущий коммит на сервере
 Write-Host "Проверка текущей версии на сервере..." -ForegroundColor Yellow
-$currentCommit = ssh "$SERVER" "cd $WWW_ROOT && git rev-parse HEAD" 2>&1
+$currentCommit = ssh "$SERVER" "cd $WWW_ROOT; git rev-parse HEAD" 2>&1
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "ОШИБКА: Не удалось подключиться к серверу или получить информацию о коммите" -ForegroundColor Red
@@ -48,7 +48,7 @@ if ($currentCommit -eq $latestCommit) {
 
 # Получаем историю коммитов между текущей и последней версией
 Write-Host "Получение истории коммитов..." -ForegroundColor Yellow
-$commits = ssh "$SERVER" "cd $WWW_ROOT && git log --oneline $currentCommit..HEAD" 2>&1
+$commits = ssh "$SERVER" "cd $WWW_ROOT; git log --oneline $currentCommit..HEAD" 2>&1
 
 if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($commits)) {
     Write-Host "ОШИБКА: Не удалось получить историю коммитов или нет новых версий" -ForegroundColor Red
@@ -56,12 +56,12 @@ if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($commits)) {
 }
 
 # Определяем следующий коммит (первый после текущего)
-$nextCommit = ssh "$SERVER" "cd $WWW_ROOT && git rev-parse $currentCommit^0" 2>&1
-$nextCommit = ssh "$SERVER" "cd $WWW_ROOT && git log --reverse --oneline $currentCommit..HEAD | head -1 | cut -d' ' -f1" 2>&1
+$nextCommit = ssh "$SERVER" "cd $WWW_ROOT; git rev-parse $currentCommit^0" 2>&1
+$nextCommit = ssh "$SERVER" "cd $WWW_ROOT; git log --reverse --oneline $currentCommit..HEAD | head -1 | cut -d' ' -f1" 2>&1
 
 # Если не удалось получить через head, попробуем другой способ
 if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($nextCommit)) {
-    $nextCommit = ssh "$SERVER" "cd $WWW_ROOT && git rev-list --reverse $currentCommit..HEAD | head -1" 2>&1
+    $nextCommit = ssh "$SERVER" "cd $WWW_ROOT; git rev-list --reverse $currentCommit..HEAD | head -1" 2>&1
 }
 
 if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($nextCommit)) {
@@ -70,7 +70,7 @@ if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($nextCommit)) {
 }
 
 # Получаем информацию о следующем коммите
-$nextCommitInfo = ssh "$SERVER" "cd $WWW_ROOT && git log -1 --oneline $nextCommit" 2>&1
+$nextCommitInfo = ssh "$SERVER" "cd $WWW_ROOT; git log -1 --oneline $nextCommit" 2>&1
 
 Write-Host ""
 Write-Host "Доступные версии для обновления:" -ForegroundColor Green
@@ -192,7 +192,7 @@ if ($LASTEXITCODE -eq 0) {
     Write-Host "Проверьте сайт: https://$DOMAIN" -ForegroundColor Cyan
     
     # Показываем информацию о текущем коммите
-    $newCommit = ssh "$SERVER" "cd $WWW_ROOT && git rev-parse HEAD && git log -1 --oneline"
+    $newCommit = ssh "$SERVER" "cd $WWW_ROOT; git rev-parse HEAD; git log -1 --oneline"
     Write-Host "Текущий коммит на сервере:" -ForegroundColor Cyan
     Write-Host $newCommit -ForegroundColor White
 } else {
