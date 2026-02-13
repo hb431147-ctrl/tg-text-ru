@@ -14,17 +14,17 @@ $SERVER = "root@45.153.70.209"
 $DOMAIN = "tg-text.ru"
 $WWW_ROOT = "/var/www/$DOMAIN"
 
-# Путь к SSH ключу (пробуем найти ключ с правильным email)
+# Путь к SSH ключу
+# Пробуем использовать ключ для tg-text.ru, если он существует
 $SSH_KEY_TG = "$env:USERPROFILE\.ssh\id_rsa_tg_text"
 $SSH_KEY_DEFAULT = "$env:USERPROFILE\.ssh\id_rsa"
 
-# Используем ключ для tg-text.ru если он существует, иначе используем дефолтный
 if (Test-Path $SSH_KEY_TG) {
     $SSH_KEY = $SSH_KEY_TG
-    Write-Host "Используется SSH ключ для tg-text.ru: $SSH_KEY" -ForegroundColor Gray
+    Write-Host "Используется SSH ключ для tg-text.ru" -ForegroundColor Gray
 } else {
     $SSH_KEY = $SSH_KEY_DEFAULT
-    Write-Host "Используется дефолтный SSH ключ: $SSH_KEY" -ForegroundColor Gray
+    Write-Host "Используется дефолтный SSH ключ" -ForegroundColor Gray
 }
 
 $SSH_CONFIG = "$env:USERPROFILE\.ssh\config"

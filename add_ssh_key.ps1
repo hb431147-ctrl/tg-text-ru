@@ -7,10 +7,10 @@ $SSH_KEY_DEFAULT = "$env:USERPROFILE\.ssh\id_rsa"
 
 if (Test-Path $SSH_KEY_TG) {
     $SSH_KEY = $SSH_KEY_TG
-    Write-Host "Используется SSH ключ для tg-text.ru" -ForegroundColor Gray
+    Write-Host "Используется SSH ключ для tg-text.ru: id_rsa_tg_text" -ForegroundColor Green
 } else {
     $SSH_KEY = $SSH_KEY_DEFAULT
-    Write-Host "Используется дефолтный SSH ключ" -ForegroundColor Gray
+    Write-Host "Используется дефолтный SSH ключ: id_rsa" -ForegroundColor Yellow
 }
 
 $SSH_PUB_KEY = "$SSH_KEY.pub"
