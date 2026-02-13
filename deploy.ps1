@@ -12,7 +12,7 @@ param(
 
 $SERVER = "root@45.153.70.209"
 $DOMAIN = "tg-text.ru"
-$WWW_ROOT = "/var/www/$DOMAIN"
+$WWW_ROOT = "/var/www/$DOMAIN/public_html"
 
 # Проверка наличия Git
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
@@ -69,6 +69,10 @@ function Rollback-Back {
     # Откатываемся к предыдущему коммиту
     try {
         git reset --hard $previousCommit
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "ОШИБКА: Не удалось выполнить откат!" -ForegroundColor Red
+            exit 1
+        }
         Write-Host "Локальный откат выполнен успешно." -ForegroundColor Green
         
         # Отправляем изменения на сервер
@@ -152,17 +156,43 @@ function Deploy-ToServer {
     $remotes = git remote
     if ($remotes -notcontains "production") {
         Write-Host "Добавление remote 'production'..." -ForegroundColor Yellow
+        Write-Host "  URL: $SERVER`:$WWW_ROOT" -ForegroundColor Gray
         git remote add production "$SERVER`:$WWW_ROOT"
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "ОШИБКА: Не удалось добавить remote 'production'!" -ForegroundColor Red
+            throw "Не удалось добавить remote"
+        }
+    } else {
+        # Обновляем URL remote на случай изменения
+        git remote set-url production "$SERVER`:$WWW_ROOT"
     }
+    
+    # Проверяем текущий коммит перед отправкой
+    $currentCommit = git rev-parse HEAD
+    Write-Host "Текущий коммит: $currentCommit" -ForegroundColor Gray
     
     # Отправка на сервер
     Write-Host "Отправка на сервер..." -ForegroundColor Yellow
-    try {
-        git push production main --force
-    } catch {
-        Write-Host "ОШИБКА при отправке на сервер: $_" -ForegroundColor Red
-        throw
+    Write-Host "  Сервер: $SERVER" -ForegroundColor Gray
+    Write-Host "  Путь: $WWW_ROOT" -ForegroundColor Gray
+    
+    $pushOutput = git push production main --force 2>&1
+    $pushExitCode = $LASTEXITCODE
+    
+    if ($pushExitCode -ne 0) {
+        Write-Host "ОШИБКА при отправке на сервер!" -ForegroundColor Red
+        Write-Host "Вывод команды:" -ForegroundColor Yellow
+        Write-Host $pushOutput -ForegroundColor Red
+        Write-Host ""
+        Write-Host "Проверьте:" -ForegroundColor Yellow
+        Write-Host "  - SSH ключ настроен для доступа к серверу" -ForegroundColor Yellow
+        Write-Host "  - Путь на сервере правильный: $WWW_ROOT" -ForegroundColor Yellow
+        Write-Host "  - Git репозиторий на сервере инициализирован" -ForegroundColor Yellow
+        Write-Host "  - Права доступа к директории на сервере" -ForegroundColor Yellow
+        throw "Ошибка git push (код выхода: $pushExitCode)"
     }
+    
+    Write-Host "Отправка выполнена успешно." -ForegroundColor Green
 }
 
 # Основная логика
@@ -189,12 +219,24 @@ if (-not (Test-Path "index.html")) {
 if (-not (Test-Path ".git")) {
     Write-Host "Инициализация Git репозитория..." -ForegroundColor Yellow
     git init
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "ОШИБКА: Не удалось инициализировать Git репозиторий!" -ForegroundColor Red
+        exit 1
+    }
     git branch -M main
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "ОШИБКА: Не удалось переименовать ветку в main!" -ForegroundColor Red
+        exit 1
+    }
 }
 
 # Добавление файлов
 Write-Host "Добавление файлов в Git..." -ForegroundColor Yellow
 git add .
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "ОШИБКА: Не удалось добавить файлы в Git!" -ForegroundColor Red
+    exit 1
+}
 
 # Проверка изменений
 $status = git status --porcelain
@@ -204,6 +246,10 @@ if ([string]::IsNullOrWhiteSpace($status)) {
     # Создание коммита
     Write-Host "Создание коммита..." -ForegroundColor Yellow
     git commit -m "Update: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "ОШИБКА: Не удалось создать коммит!" -ForegroundColor Red
+        exit 1
+    }
 }
 
 # Отправка на сервер
