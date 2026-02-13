@@ -216,16 +216,62 @@ function Deploy-ToServer {
     Write-Host "Отправка выполнена успешно." -ForegroundColor Green
     
     # Проверяем, что hook выполнился (ищем сообщения hook в выводе)
+    $hookExecuted = $false
     if ($pushOutput -match "Начало деплоя|Деплой завершен|checkout|Копирование") {
         Write-Host "Git hook выполнен успешно (обнаружены сообщения hook)." -ForegroundColor Green
+        $hookExecuted = $true
     } else {
-        Write-Host "ВНИМАНИЕ: Не обнаружено подтверждение выполнения Git hook в выводе!" -ForegroundColor Yellow
-        Write-Host "Это может быть нормально, если hook выполняется в фоне." -ForegroundColor Yellow
+        Write-Host "Не обнаружено подтверждение выполнения Git hook в выводе." -ForegroundColor Yellow
+        Write-Host "Выполняем hook вручную через SSH для гарантии деплоя..." -ForegroundColor Yellow
     }
     
-    # Даем время hook выполниться
-    Write-Host "Ожидание завершения hook на сервере..." -ForegroundColor Gray
-    Start-Sleep -Seconds 3
+    # Всегда выполняем деплой через SSH для гарантии (на случай если hook не выполнился автоматически)
+    if (-not $hookExecuted) {
+        Write-Host "Выполнение деплоя через SSH (гарантированный способ)..." -ForegroundColor Gray
+        try {
+            # Получаем текущий коммит для передачи в hook
+            $newRev = ssh $SERVER "cd $WWW_ROOT && git rev-parse HEAD" 2>&1
+            $oldRev = ssh $SERVER "cd $WWW_ROOT && git rev-parse HEAD@{1} 2>/dev/null || echo '0000000000000000000000000000000000000000'" 2>&1
+            
+            # Выполняем hook с правильной передачей данных через stdin
+            # Используем printf для правильной передачи данных
+            $hookCommand = "cd $WWW_ROOT && printf '%s %s refs/heads/main\n' '$oldRev' '$newRev' | bash $WWW_ROOT/.git/hooks/post-receive"
+            $hookResult = ssh $SERVER $hookCommand 2>&1
+            
+            if ($LASTEXITCODE -eq 0) {
+                Write-Host "Деплой выполнен успешно через SSH." -ForegroundColor Green
+                if ($hookResult -and $hookResult.Trim()) {
+                    Write-Host "Вывод hook:" -ForegroundColor Gray
+                    Write-Host $hookResult -ForegroundColor Gray
+                }
+            } else {
+                Write-Host "ВНИМАНИЕ: Деплой через SSH выполнился с ошибкой!" -ForegroundColor Yellow
+                Write-Host "Вывод:" -ForegroundColor Yellow
+                Write-Host $hookResult -ForegroundColor Yellow
+                Write-Host ""
+                Write-Host "Пробуем упрощенный способ деплоя..." -ForegroundColor Yellow
+                
+                # Упрощенный способ - выполняем команды из hook напрямую
+                # Делаем checkout в staging, затем копируем в public_html
+                $simpleDeployCmd = "cd $WWW_ROOT && mkdir -p $WWW_ROOT/staging && export GIT_DIR=$WWW_ROOT/.git && export GIT_WORK_TREE=$WWW_ROOT/staging && git checkout -f main && unset GIT_DIR && unset GIT_WORK_TREE && rsync -av --delete --include='index.html' --include='*.html' --include='*.css' --include='*.js' --include='*.jpg' --include='*.jpeg' --include='*.png' --include='*.gif' --include='*.svg' --include='*.ico' --include='*.woff' --include='*.woff2' --include='*.ttf' --include='*.eot' --exclude='deploy.ps1' --exclude='nginx_*.conf' --exclude='post-receive' --exclude='README.md' --exclude='DEPLOY_GUIDE.md' --exclude='SSL/' --exclude='*.sh' --exclude='*' $WWW_ROOT/staging/ $WWW_ROOT/public_html/ 2>/dev/null || cp $WWW_ROOT/staging/index.html $WWW_ROOT/public_html/ 2>/dev/null || true && chown -R http:http $WWW_ROOT/public_html && chmod -R 755 $WWW_ROOT/public_html && rm -rf $WWW_ROOT/staging"
+                $simpleDeploy = ssh $SERVER $simpleDeployCmd 2>&1
+                
+                if ($LASTEXITCODE -eq 0) {
+                    Write-Host "Упрощенный деплой выполнен успешно." -ForegroundColor Green
+                } else {
+                    Write-Host "Упрощенный деплой также не удался." -ForegroundColor Red
+                    Write-Host "Вывод:" -ForegroundColor Yellow
+                    Write-Host $simpleDeploy -ForegroundColor Yellow
+                }
+            }
+        } catch {
+            Write-Host "Не удалось выполнить деплой через SSH: $_" -ForegroundColor Yellow
+        }
+    }
+    
+    # Даем время для завершения операций
+    Write-Host "Ожидание завершения операций на сервере..." -ForegroundColor Gray
+    Start-Sleep -Seconds 2
     
     # Проверяем файлы на сервере
     Write-Host "Проверка файлов на сервере..." -ForegroundColor Gray
