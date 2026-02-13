@@ -5,9 +5,40 @@
 
 const express = require('express');
 const cors = require('cors');
+const mysql = require('mysql2/promise');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+
+// Настройки подключения к MySQL
+const dbConfig = {
+    host: process.env.DB_HOST || 'localhost',
+    user: process.env.DB_USER || 'tg_text_user',
+    password: process.env.DB_PASSWORD || 'tg_text_password_2024',
+    database: process.env.DB_NAME || 'tg_text_db',
+    waitForConnections: true,
+    connectionLimit: 10,
+    queueLimit: 0
+};
+
+// Создание пула подключений
+let dbPool;
+try {
+    dbPool = mysql.createPool(dbConfig);
+    console.log('Подключение к MySQL настроено');
+} catch (error) {
+    console.error('Ошибка создания пула подключений MySQL:', error);
+    dbPool = null;
+}
+
+// Функция для получения IP адреса пользователя
+function getUserIP(req) {
+    return req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
+           req.headers['x-real-ip'] ||
+           req.connection?.remoteAddress ||
+           req.socket?.remoteAddress ||
+           'unknown';
+}
 
 // Middleware для логирования
 app.use((req, res, next) => {
@@ -191,7 +222,7 @@ function processText(text, excludeWordsStr) {
 /**
  * API endpoint для обработки текста
  */
-app.post('/api/process', (req, res) => {
+app.post('/api/process', async (req, res) => {
     try {
         console.log('Получен запрос:', {
             method: req.method,
@@ -224,6 +255,26 @@ app.post('/api/process', (req, res) => {
             return res.status(400).json(result);
         }
         
+        // Сохраняем запрос в базу данных
+        if (dbPool) {
+            try {
+                const userIP = getUserIP(req);
+                const userAgent = req.headers['user-agent'] || '';
+                const requestText = text.trim();
+                const excludeWords = exclude_words ? exclude_words.trim() : null;
+                const resultText = result.result || '';
+                
+                await dbPool.execute(
+                    'INSERT INTO user_requests (user_ip, user_agent, request_text, exclude_words, result_text) VALUES (?, ?, ?, ?, ?)',
+                    [userIP, userAgent, requestText, excludeWords, resultText]
+                );
+                console.log('Запрос сохранен в базу данных');
+            } catch (dbError) {
+                console.error('Ошибка сохранения в БД:', dbError.message);
+                // Не прерываем выполнение, если ошибка БД
+            }
+        }
+        
         console.log('Результат успешно обработан');
         return res.status(200).json(result);
     } catch (error) {
@@ -233,10 +284,97 @@ app.post('/api/process', (req, res) => {
 });
 
 /**
+ * API endpoint для получения истории запросов
+ */
+app.get('/api/history', async (req, res) => {
+    try {
+        if (!dbPool) {
+            return res.status(503).json({ error: 'База данных не доступна' });
+        }
+        
+        const limit = parseInt(req.query.limit) || 50;
+        const offset = parseInt(req.query.offset) || 0;
+        const userIP = req.query.ip || getUserIP(req);
+        
+        // Получаем историю запросов
+        const [rows] = await dbPool.execute(
+            'SELECT id, user_ip, request_text, exclude_words, result_text, created_at FROM user_requests WHERE user_ip = ? ORDER BY created_at DESC LIMIT ? OFFSET ?',
+            [userIP, limit, offset]
+        );
+        
+        // Получаем общее количество запросов
+        const [countRows] = await dbPool.execute(
+            'SELECT COUNT(*) as total FROM user_requests WHERE user_ip = ?',
+            [userIP]
+        );
+        
+        return res.json({
+            requests: rows,
+            total: countRows[0].total,
+            limit: limit,
+            offset: offset
+        });
+    } catch (error) {
+        console.error('Ошибка получения истории:', error);
+        return res.status(500).json({ error: `Ошибка получения истории: ${error.message}` });
+    }
+});
+
+/**
+ * API endpoint для получения всех запросов (административный)
+ */
+app.get('/api/all-requests', async (req, res) => {
+    try {
+        if (!dbPool) {
+            return res.status(503).json({ error: 'База данных не доступна' });
+        }
+        
+        const limit = parseInt(req.query.limit) || 100;
+        const offset = parseInt(req.query.offset) || 0;
+        
+        // Получаем все запросы
+        const [rows] = await dbPool.execute(
+            'SELECT id, user_ip, user_agent, request_text, exclude_words, result_text, created_at FROM user_requests ORDER BY created_at DESC LIMIT ? OFFSET ?',
+            [limit, offset]
+        );
+        
+        // Получаем общее количество запросов
+        const [countRows] = await dbPool.execute('SELECT COUNT(*) as total FROM user_requests');
+        
+        return res.json({
+            requests: rows,
+            total: countRows[0].total,
+            limit: limit,
+            offset: offset
+        });
+    } catch (error) {
+        console.error('Ошибка получения всех запросов:', error);
+        return res.status(500).json({ error: `Ошибка получения запросов: ${error.message}` });
+    }
+});
+
+/**
  * Проверка работоспособности API
  */
-app.get('/api/health', (req, res) => {
-    res.json({ status: 'ok', service: 'text-processor' });
+app.get('/api/health', async (req, res) => {
+    const health = {
+        status: 'ok',
+        service: 'text-processor',
+        database: 'unknown'
+    };
+    
+    if (dbPool) {
+        try {
+            await dbPool.execute('SELECT 1');
+            health.database = 'connected';
+        } catch (error) {
+            health.database = 'error: ' + error.message;
+        }
+    } else {
+        health.database = 'not configured';
+    }
+    
+    res.json(health);
 });
 
 /**
@@ -249,6 +387,8 @@ app.get('/', (req, res) => {
         runtime: 'Node.js',
         endpoints: {
             '/api/process': 'POST - обработка текста',
+            '/api/history': 'GET - история запросов текущего пользователя',
+            '/api/all-requests': 'GET - все запросы (административный)',
             '/api/health': 'GET - проверка работоспособности'
         }
     });

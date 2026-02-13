@@ -5,9 +5,14 @@
 ## Структура проекта
 
 - `index.html` - главная страница сайта
+- `app.js` - Node.js API сервер для обработки текста
+- `package.json` - зависимости Node.js проекта
 - `nginx_tg-text.ru.conf` - конфигурация nginx для сервера
 - `deploy.ps1` / `deploy.bat` - скрипт для автоматического деплоя на сервер (включает функции отката)
 - `post-receive` - Git hook для автоматического обновления сайта на сервере
+- `setup_mysql.sh` - скрипт установки MySQL на сервере
+- `init_database.sql` - SQL скрипт для создания базы данных
+- `MYSQL_SETUP.md` - инструкция по установке MySQL
 - `SSL/` - SSL сертификаты для домена
 
 ## Быстрый старт
@@ -61,6 +66,8 @@ git push production main
 - **Домен:** tg-text.ru
 - **ОС:** Arch Linux
 - **Web сервер:** Nginx
+- **API сервер:** Node.js (Express) на порту 5000
+- **База данных:** MySQL (tg_text_db)
 - **Путь на сервере:** /var/www/tg-text.ru/public_html
 
 ## Особенности
@@ -69,6 +76,8 @@ git push production main
 ✅ SSL/HTTPS поддержка  
 ✅ Graceful reload nginx (без обрыва соединений)  
 ✅ Современные настройки безопасности  
+✅ MySQL база данных для хранения истории запросов  
+✅ API для обработки текста с сохранением в БД  
 
 ## Команды
 
@@ -90,4 +99,42 @@ git log --oneline
 
 # Отправить изменения на сервер вручную
 git push production main
+
+# Установка MySQL на сервере
+ssh root@45.153.70.209
+cd /var/www/tg-text.ru
+chmod +x setup_mysql.sh
+./setup_mysql.sh
+
+# Или вручную:
+mysql -u root -p < init_database.sql
 ```
+
+## База данных MySQL
+
+Проект использует MySQL для хранения истории запросов пользователей.
+
+### Установка MySQL
+
+Подробная инструкция в файле `MYSQL_SETUP.md`.
+
+Быстрая установка:
+```bash
+ssh root@45.153.70.209
+cd /var/www/tg-text.ru
+chmod +x setup_mysql.sh
+./setup_mysql.sh
+```
+
+### Структура базы данных
+
+- **База данных:** `tg_text_db`
+- **Пользователь:** `tg_text_user`
+- **Таблица:** `user_requests` - хранит все запросы пользователей
+
+### API Endpoints
+
+- `POST /api/process` - обработка текста (автоматически сохраняет в БД)
+- `GET /api/history` - история запросов текущего пользователя
+- `GET /api/all-requests` - все запросы (административный)
+- `GET /api/health` - проверка работоспособности (включая БД)
