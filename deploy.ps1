@@ -16,6 +16,7 @@ $WWW_ROOT = "/var/www/$DOMAIN"
 
 # Путь к SSH ключу
 $SSH_KEY = "$env:USERPROFILE\.ssh\id_rsa"
+$SSH_CONFIG = "$env:USERPROFILE\.ssh\config"
 
 # Проверка наличия SSH ключа
 if (-not (Test-Path $SSH_KEY)) {
@@ -24,13 +25,51 @@ if (-not (Test-Path $SSH_KEY)) {
     exit 1
 }
 
+# Настройка SSH config для сервера
+$sshConfigEntry = @"
+Host 45.153.70.209
+    HostName 45.153.70.209
+    User root
+    IdentityFile $SSH_KEY
+    StrictHostKeyChecking accept-new
+    IdentitiesOnly yes
+"@
+
+# Проверяем, есть ли уже запись для этого хоста в config
+if (Test-Path $SSH_CONFIG) {
+    $configContent = Get-Content $SSH_CONFIG -Raw
+    if ($configContent -notmatch "Host 45\.153\.70\.209") {
+        # Добавляем запись в конец файла
+        Add-Content -Path $SSH_CONFIG -Value "`n$sshConfigEntry"
+    }
+} else {
+    # Создаем новый config файл
+    Set-Content -Path $SSH_CONFIG -Value $sshConfigEntry
+    icacls $SSH_CONFIG /inheritance:r /grant:r "${env:USERNAME}:F" | Out-Null
+}
+
 # Настройка SSH для использования правильного ключа
-$env:GIT_SSH_COMMAND = "ssh -i `"$SSH_KEY`" -o StrictHostKeyChecking=accept-new"
+$env:GIT_SSH_COMMAND = "ssh -i `"$SSH_KEY`" -o StrictHostKeyChecking=accept-new -o IdentitiesOnly=yes"
 
 # Проверка наличия Git
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
     Write-Host "ОШИБКА: Git не установлен!" -ForegroundColor Red
     exit 1
+}
+
+# Функция для проверки SSH подключения
+function Test-SSHConnection {
+    Write-Host "Проверка SSH подключения к серверу..." -ForegroundColor Gray
+    $testResult = ssh -i $SSH_KEY -o StrictHostKeyChecking=accept-new -o ConnectTimeout=5 $SERVER "echo 'SSH_OK'" 2>&1
+    
+    if ($LASTEXITCODE -eq 0 -and $testResult -match "SSH_OK") {
+        Write-Host "✓ SSH подключение работает!" -ForegroundColor Green
+        return $true
+    } else {
+        Write-Host "✗ SSH подключение не работает!" -ForegroundColor Red
+        Write-Host "Вывод: $testResult" -ForegroundColor Yellow
+        return $false
+    }
 }
 
 # Функция для получения текущего коммита
@@ -171,6 +210,19 @@ function Rollback-Forward {
 
 # Функция для отправки на сервер
 function Deploy-ToServer {
+    # Проверяем SSH подключение перед деплоем
+    if (-not (Test-SSHConnection)) {
+        Write-Host ""
+        Write-Host "ВНИМАНИЕ: SSH подключение не работает!" -ForegroundColor Yellow
+        Write-Host "Деплой будет продолжен, но может завершиться ошибкой." -ForegroundColor Yellow
+        Write-Host "Рекомендуется сначала настроить SSH ключ (см. инструкции ниже)." -ForegroundColor Yellow
+        Write-Host ""
+        $continue = Read-Host "Продолжить деплой? (y/n)"
+        if ($continue -ne "y" -and $continue -ne "Y") {
+            throw "Деплой отменен пользователем"
+        }
+    }
+    
     # Добавление remote если его нет
     $remotes = git remote
     if ($remotes -notcontains "production") {
@@ -195,7 +247,8 @@ function Deploy-ToServer {
     Write-Host "Используется SSH ключ: $SSH_KEY" -ForegroundColor Gray
     
     # Выполняем push с явным указанием SSH команды
-    $pushOutput = git -c core.sshCommand="ssh -i `"$SSH_KEY`" -o StrictHostKeyChecking=accept-new" push production main --force 2>&1
+    $sshCommand = "ssh -i `"$SSH_KEY`" -o StrictHostKeyChecking=accept-new -o IdentitiesOnly=yes -o UserKnownHostsFile=$env:USERPROFILE\.ssh\known_hosts"
+    $pushOutput = git -c core.sshCommand=$sshCommand push production main --force 2>&1
     $pushExitCode = $LASTEXITCODE
     
     if ($pushExitCode -ne 0) {
@@ -203,15 +256,26 @@ function Deploy-ToServer {
         Write-Host "Вывод команды:" -ForegroundColor Yellow
         Write-Host $pushOutput -ForegroundColor Red
         Write-Host ""
-        Write-Host "Проверьте:" -ForegroundColor Yellow
-        Write-Host "  1. SSH ключ добавлен на сервер: $SSH_KEY.pub" -ForegroundColor Yellow
-        Write-Host "  2. Публичный ключ добавлен в ~/.ssh/authorized_keys на сервере" -ForegroundColor Yellow
-        Write-Host "  3. Права на ключ: icacls `"$SSH_KEY`" /inheritance:r /grant:r `"$env:USERNAME:R`"" -ForegroundColor Yellow
         Write-Host ""
-        Write-Host "Для добавления ключа на сервер выполните:" -ForegroundColor Cyan
-        Write-Host "  type $SSH_KEY.pub" -ForegroundColor Cyan
-        Write-Host "  Скопируйте вывод и на сервере выполните:" -ForegroundColor Cyan
-        Write-Host "    mkdir -p ~/.ssh && echo 'ваш_ключ' >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys" -ForegroundColor Cyan
+        Write-Host "=== ИНСТРУКЦИЯ ПО ДОБАВЛЕНИЮ SSH КЛЮЧА НА СЕРВЕР ===" -ForegroundColor Yellow
+        Write-Host ""
+        Write-Host "1. Просмотрите ваш публичный ключ:" -ForegroundColor Cyan
+        Write-Host "   type $SSH_KEY.pub" -ForegroundColor White
+        Write-Host ""
+        Write-Host "2. Подключитесь к серверу (через пароль или другой способ):" -ForegroundColor Cyan
+        Write-Host "   ssh root@45.153.70.209" -ForegroundColor White
+        Write-Host ""
+        Write-Host "3. На сервере выполните (замените 'ваш_ключ' на вывод из шага 1):" -ForegroundColor Cyan
+        Write-Host "   mkdir -p ~/.ssh" -ForegroundColor White
+        Write-Host "   echo 'ваш_ключ' >> ~/.ssh/authorized_keys" -ForegroundColor White
+        Write-Host "   chmod 600 ~/.ssh/authorized_keys" -ForegroundColor White
+        Write-Host "   chmod 700 ~/.ssh" -ForegroundColor White
+        Write-Host ""
+        Write-Host "4. Проверьте подключение:" -ForegroundColor Cyan
+        Write-Host "   ssh -i $SSH_KEY root@45.153.70.209 'echo Connection OK'" -ForegroundColor White
+        Write-Host ""
+        Write-Host "5. После добавления ключа запустите деплой снова:" -ForegroundColor Cyan
+        Write-Host "   .\deploy.ps1" -ForegroundColor White
         throw "Ошибка git push"
     }
     
