@@ -64,11 +64,12 @@ git push production main
 
 - **IP:** 45.153.70.209
 - **Домен:** tg-text.ru
-- **ОС:** Arch Linux
+- **ОС:** Ubuntu
 - **Web сервер:** Nginx
 - **API сервер:** Node.js (Express) на порту 5000
 - **База данных:** MySQL (tg_text_db)
 - **Путь на сервере:** /var/www/tg-text.ru/public_html
+- **SSH ключ:** `C:\Users\vsush\.ssh\id_rsa` (название: `id_rsa`)
 
 ## Особенности
 

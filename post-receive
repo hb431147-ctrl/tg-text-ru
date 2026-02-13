@@ -67,6 +67,22 @@ rsync -av --delete \
   ${STAGING_DIR}/ ${DEPLOY_DIR}/ || \
   (cp ${STAGING_DIR}/index.html ${DEPLOY_DIR}/ 2>/dev/null || true)
 
+# Копируем служебные файлы (.sh, .sql) в корень репозитория (не в public_html)
+echo "Копирование служебных файлов..."
+if [ -f "${STAGING_DIR}/setup_mysql.sh" ]; then
+    cp ${STAGING_DIR}/setup_mysql.sh ${WWW_ROOT}/
+    chmod +x ${WWW_ROOT}/setup_mysql.sh
+fi
+if [ -f "${STAGING_DIR}/init_database.sql" ]; then
+    cp ${STAGING_DIR}/init_database.sql ${WWW_ROOT}/
+fi
+if [ -f "${STAGING_DIR}/app.js" ]; then
+    cp ${STAGING_DIR}/app.js ${WWW_ROOT}/
+fi
+if [ -f "${STAGING_DIR}/package.json" ]; then
+    cp ${STAGING_DIR}/package.json ${WWW_ROOT}/
+fi
+
 # Устанавливаем правильные права
 chown -R ${NGINX_USER}:${NGINX_USER} ${DEPLOY_DIR}
 chmod -R 755 ${DEPLOY_DIR}

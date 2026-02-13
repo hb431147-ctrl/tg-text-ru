@@ -1,4 +1,21 @@
-# Установка MySQL на сервере
+# Установка MySQL на сервере (Ubuntu)
+
+## Информация о SSH ключе
+
+Ваш SSH ключ находится в:
+- **Приватный ключ:** `C:\Users\vsush\.ssh\id_rsa`
+- **Публичный ключ:** `C:\Users\vsush\.ssh\id_rsa.pub`
+- **Название:** `id_rsa` / `id_rsa.pub`
+
+Для подключения к серверу используйте:
+```bash
+ssh -i C:\Users\vsush\.ssh\id_rsa root@45.153.70.209
+```
+
+Или если ключ добавлен в ssh-agent:
+```bash
+ssh root@45.153.70.209
+```
 
 ## Быстрая установка
 
@@ -45,17 +62,22 @@ chmod +x setup_mysql.sh
 ./setup_mysql.sh
 ```
 
-## Ручная установка
+## Ручная установка (Ubuntu)
 
-1. Установите MySQL:
+1. Обновите список пакетов:
 ```bash
-pacman -S mysql
+apt-get update
 ```
 
-2. Запустите MySQL:
+2. Установите MySQL:
 ```bash
-systemctl enable mysqld
-systemctl start mysqld
+apt-get install -y mysql-server
+```
+
+3. Запустите MySQL:
+```bash
+systemctl enable mysql
+systemctl start mysql
 ```
 
 3. Создайте базу данных:
