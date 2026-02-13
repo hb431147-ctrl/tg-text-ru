@@ -1,9 +1,22 @@
-# Скрипт для автоматического добавления SSH ключа на сервер
+# Скрипт для добавления SSH ключа на сервер
 $SERVER = "root@45.153.70.209"
-$SSH_KEY = "$env:USERPROFILE\.ssh\id_rsa"
+
+# Используем ключ для tg-text.ru если он существует, иначе используем дефолтный
+$SSH_KEY_TG = "$env:USERPROFILE\.ssh\id_rsa_tg_text"
+$SSH_KEY_DEFAULT = "$env:USERPROFILE\.ssh\id_rsa"
+
+if (Test-Path $SSH_KEY_TG) {
+    $SSH_KEY = $SSH_KEY_TG
+    Write-Host "Используется SSH ключ для tg-text.ru" -ForegroundColor Gray
+} else {
+    $SSH_KEY = $SSH_KEY_DEFAULT
+    Write-Host "Используется дефолтный SSH ключ" -ForegroundColor Gray
+}
+
 $SSH_PUB_KEY = "$SSH_KEY.pub"
 
 Write-Host "=== Добавление SSH ключа на сервер ===" -ForegroundColor Green
+Write-Host ""
 
 if (-not (Test-Path $SSH_PUB_KEY)) {
     Write-Host "ОШИБКА: Публичный ключ не найден: $SSH_PUB_KEY" -ForegroundColor Red
@@ -13,53 +26,45 @@ if (-not (Test-Path $SSH_PUB_KEY)) {
 $publicKey = Get-Content $SSH_PUB_KEY -Raw
 $publicKey = $publicKey.Trim()
 
-Write-Host "Публичный ключ:" -ForegroundColor Cyan
-Write-Host $publicKey -ForegroundColor Gray
+Write-Host "Ваш публичный SSH ключ:" -ForegroundColor Cyan
+Write-Host $publicKey -ForegroundColor White
 Write-Host ""
 
-Write-Host "Попытка добавления ключа через SSH..." -ForegroundColor Yellow
-Write-Host "Введите пароль root для сервера (если потребуется):" -ForegroundColor Cyan
+Write-Host "=== ИНСТРУКЦИЯ ===" -ForegroundColor Yellow
+Write-Host ""
+Write-Host "1. Подключитесь к серверу (используйте пароль root):" -ForegroundColor Cyan
+Write-Host "   ssh root@45.153.70.209" -ForegroundColor White
+Write-Host ""
+Write-Host "2. На сервере выполните следующие команды:" -ForegroundColor Cyan
+Write-Host "   mkdir -p ~/.ssh" -ForegroundColor White
+Write-Host "   chmod 700 ~/.ssh" -ForegroundColor White
+Write-Host ""
+Write-Host "3. Добавьте ваш публичный ключ (скопируйте ключ выше):" -ForegroundColor Cyan
+Write-Host "   nano ~/.ssh/authorized_keys" -ForegroundColor White
+Write-Host "   (Вставьте ключ, сохраните: Ctrl+O, Enter, Ctrl+X)" -ForegroundColor Gray
+Write-Host ""
+Write-Host "   ИЛИ выполните команду:" -ForegroundColor Cyan
+Write-Host "   echo '$publicKey' >> ~/.ssh/authorized_keys" -ForegroundColor White
+Write-Host ""
+Write-Host "4. Установите правильные права:" -ForegroundColor Cyan
+Write-Host "   chmod 600 ~/.ssh/authorized_keys" -ForegroundColor White
+Write-Host ""
+Write-Host "5. Проверьте подключение (из PowerShell):" -ForegroundColor Cyan
+Write-Host "   ssh -i $SSH_KEY root@45.153.70.209 'echo Connection OK'" -ForegroundColor White
 Write-Host ""
 
-# Создаем временный файл с командами
-$tempFile = [System.IO.Path]::GetTempFileName()
-$commands = @"
-mkdir -p ~/.ssh
-echo '$publicKey' >> ~/.ssh/authorized_keys
-chmod 600 ~/.ssh/authorized_keys
-chmod 700 ~/.ssh
-"@
-
-$commands | Out-File -FilePath $tempFile -Encoding ASCII -NoNewline
-
-# Выполняем команды через SSH
-Write-Host "Выполнение команд на сервере..." -ForegroundColor Gray
-$result = Get-Content $tempFile | ssh -i $SSH_KEY -o StrictHostKeyChecking=accept-new $SERVER "bash" 2>&1
-
-Remove-Item $tempFile -ErrorAction SilentlyContinue
-
-Write-Host "Команды выполнены!" -ForegroundColor Green
-
-# Проверяем подключение
-Write-Host ""
-Write-Host "Проверка SSH подключения..." -ForegroundColor Yellow
-$testResult = ssh -i $SSH_KEY -o ConnectTimeout=5 $SERVER "echo SSH_TEST_OK" 2>&1
-
-if ($LASTEXITCODE -eq 0 -and $testResult -match "SSH_TEST_OK") {
-    Write-Host "SSH подключение работает!" -ForegroundColor Green
-    Write-Host ""
-    Write-Host "Теперь можно запустить деплой:" -ForegroundColor Cyan
-    Write-Host "  .\deploy.ps1" -ForegroundColor White
-} else {
-    Write-Host "SSH подключение еще не работает" -ForegroundColor Red
-    Write-Host "Вывод: $testResult" -ForegroundColor Yellow
-    Write-Host ""
-    Write-Host "Добавьте ключ вручную:" -ForegroundColor Yellow
-    Write-Host "1. Подключитесь: ssh $SERVER" -ForegroundColor Cyan
-    Write-Host "2. Выполните на сервере:" -ForegroundColor Cyan
-    Write-Host "   mkdir -p ~/.ssh" -ForegroundColor White
-    $keyLine = "   echo '$publicKey' >> ~/.ssh/authorized_keys"
-    Write-Host $keyLine -ForegroundColor White
-    Write-Host "   chmod 600 ~/.ssh/authorized_keys" -ForegroundColor White
-    Write-Host "   chmod 700 ~/.ssh" -ForegroundColor White
+# Пробуем автоматически добавить через ssh-copy-id (если доступен)
+$sshCopyId = Get-Command ssh-copy-id -ErrorAction SilentlyContinue
+if ($null -ne $sshCopyId) {
+    Write-Host "Попытка автоматического добавления через ssh-copy-id..." -ForegroundColor Yellow
+    Write-Host "Введите пароль root при запросе:" -ForegroundColor Cyan
+    ssh-copy-id -i $SSH_PUB_KEY $SERVER
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host ""
+        Write-Host "Ключ успешно добавлен!" -ForegroundColor Green
+    }
 }
+
+Write-Host ""
+Write-Host "После добавления ключа запустите деплой:" -ForegroundColor Cyan
+Write-Host "  .\deploy.ps1" -ForegroundColor White

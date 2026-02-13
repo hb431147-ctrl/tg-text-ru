@@ -14,8 +14,19 @@ $SERVER = "root@45.153.70.209"
 $DOMAIN = "tg-text.ru"
 $WWW_ROOT = "/var/www/$DOMAIN"
 
-# Путь к SSH ключу
-$SSH_KEY = "$env:USERPROFILE\.ssh\id_rsa"
+# Путь к SSH ключу (пробуем найти ключ с правильным email)
+$SSH_KEY_TG = "$env:USERPROFILE\.ssh\id_rsa_tg_text"
+$SSH_KEY_DEFAULT = "$env:USERPROFILE\.ssh\id_rsa"
+
+# Используем ключ для tg-text.ru если он существует, иначе используем дефолтный
+if (Test-Path $SSH_KEY_TG) {
+    $SSH_KEY = $SSH_KEY_TG
+    Write-Host "Используется SSH ключ для tg-text.ru: $SSH_KEY" -ForegroundColor Gray
+} else {
+    $SSH_KEY = $SSH_KEY_DEFAULT
+    Write-Host "Используется дефолтный SSH ключ: $SSH_KEY" -ForegroundColor Gray
+}
+
 $SSH_CONFIG = "$env:USERPROFILE\.ssh\config"
 
 # Проверка наличия SSH ключа
@@ -318,9 +329,23 @@ function Deploy-ToServer {
         
         # Дополнительная диагностика
         Write-Host "=== ДИАГНОСТИКА ===" -ForegroundColor Yellow
+        
+        # Показываем локальный ключ
+        $localPubKey = Get-Content "$SSH_KEY.pub" -Raw
+        Write-Host "Локальный публичный ключ:" -ForegroundColor Cyan
+        Write-Host $localPubKey.Trim() -ForegroundColor Gray
+        Write-Host ""
+        
         Write-Host "Проверка SSH подключения напрямую..." -ForegroundColor Gray
         $sshTest = ssh -i $SSH_KEY -o ConnectTimeout=5 $SERVER "echo 'Direct SSH OK'" 2>&1
         Write-Host "Результат прямого SSH: $sshTest" -ForegroundColor Gray
+        
+        if ($sshTest -match "Permission denied") {
+            Write-Host ""
+            Write-Host "ПРОБЛЕМА: Локальный ключ не совпадает с ключом на сервере!" -ForegroundColor Red
+            Write-Host "На сервере должен быть добавлен ключ выше (с your_email@example.com)" -ForegroundColor Yellow
+            Write-Host "Или используйте ключ с hb431147@yandex.ru локально" -ForegroundColor Yellow
+        }
         
         Write-Host ""
         Write-Host "Проверка Git репозитория на сервере..." -ForegroundColor Gray
@@ -345,18 +370,14 @@ function Deploy-ToServer {
         Write-Host "4. Проверьте подключение:" -ForegroundColor Cyan
         Write-Host "   ssh -i $SSH_KEY root@45.153.70.209 'echo Connection OK'" -ForegroundColor White
         Write-Host ""
-        Write-Host "5. Или запустите автоматическое добавление ключа:" -ForegroundColor Cyan
+        Write-Host "5. Или запустите скрипт для просмотра инструкций:" -ForegroundColor Cyan
         Write-Host "   .\add_ssh_key.ps1" -ForegroundColor White
         Write-Host ""
         Write-Host "6. После добавления ключа запустите деплой снова:" -ForegroundColor Cyan
         Write-Host "   .\deploy.ps1" -ForegroundColor White
-        
-        # Пробуем автоматически добавить ключ
-        if (Test-Path ".\add_ssh_key.ps1") {
-            Write-Host ""
-            Write-Host "Попытка автоматически добавить ключ..." -ForegroundColor Yellow
-            & ".\add_ssh_key.ps1"
-        }
+        Write-Host ""
+        Write-Host "ВАЖНО: Ключ должен быть добавлен на сервер вручную!" -ForegroundColor Yellow
+        Write-Host "Автоматическое добавление невозможно без пароля root." -ForegroundColor Yellow
         
         throw "Ошибка git push"
     }
