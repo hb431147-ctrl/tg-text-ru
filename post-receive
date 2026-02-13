@@ -9,7 +9,7 @@ DOMAIN="tg-text.ru"
 WWW_ROOT="/var/www/${DOMAIN}"
 DEPLOY_DIR="${WWW_ROOT}/public_html"
 STAGING_DIR="${WWW_ROOT}/staging"
-NGINX_USER="http"
+NGINX_USER="www-data"
 GIT_DIR="${WWW_ROOT}/.git"
 
 echo "=== Начало деплоя ==="
