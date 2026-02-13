@@ -296,10 +296,10 @@ app.get('/api/history', async (req, res) => {
         const offset = parseInt(req.query.offset) || 0;
         const userIP = req.query.ip || getUserIP(req);
         
-        // Получаем историю запросов
+        // Получаем историю запросов (LIMIT и OFFSET не могут быть параметрами)
         const [rows] = await dbPool.execute(
-            'SELECT id, user_ip, request_text, exclude_words, result_text, created_at FROM user_requests WHERE user_ip = ? ORDER BY created_at DESC LIMIT ? OFFSET ?',
-            [userIP, limit, offset]
+            `SELECT id, user_ip, request_text, exclude_words, result_text, created_at FROM user_requests WHERE user_ip = ? ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`,
+            [userIP]
         );
         
         // Получаем общее количество запросов
@@ -332,10 +332,9 @@ app.get('/api/all-requests', async (req, res) => {
         const limit = parseInt(req.query.limit) || 100;
         const offset = parseInt(req.query.offset) || 0;
         
-        // Получаем все запросы
+        // Получаем все запросы (LIMIT и OFFSET не могут быть параметрами)
         const [rows] = await dbPool.execute(
-            'SELECT id, user_ip, user_agent, request_text, exclude_words, result_text, created_at FROM user_requests ORDER BY created_at DESC LIMIT ? OFFSET ?',
-            [limit, offset]
+            `SELECT id, user_ip, user_agent, request_text, exclude_words, result_text, created_at FROM user_requests ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`
         );
         
         // Получаем общее количество запросов
