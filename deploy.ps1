@@ -117,29 +117,19 @@ function Deploy-ToServer {
     # Деплой на сервере
     Write-Host "Выполнение деплоя на сервере..." -ForegroundColor Gray
     
-    # Получаем последний коммит
-    $latestCommit = git rev-parse HEAD
-    
     # Используем git archive для извлечения файлов из bare репозитория
-    $deployCmd = @"
-cd $WWW_ROOT && mkdir -p staging && 
-git archive --format=tar main | tar -x -C staging 2>/dev/null || 
-git archive --format=tar HEAD | tar -x -C staging 2>/dev/null || 
-(git --git-dir=$WWW_ROOT/.git --work-tree=$WWW_ROOT/staging checkout -f main 2>/dev/null || true) &&
-rsync -av --delete --include='index.html' --include='*.html' --include='*.css' --include='*.js' --include='*.jpg' --include='*.jpeg' --include='*.png' --include='*.gif' --include='*.svg' --include='*.ico' --include='*.woff' --include='*.woff2' --include='*.ttf' --include='*.eot' --exclude='deploy.ps1' --exclude='nginx_*.conf' --exclude='post-receive' --exclude='README.md' --exclude='*.md' --exclude='SSL/' --exclude='*.sh' --exclude='*.sql' --exclude='*' staging/ public_html/ &&
-chown -R www-data:www-data public_html && 
-chmod -R 755 public_html && 
-rm -rf staging
-"@
+    $deployCmd = "cd $WWW_ROOT && mkdir -p staging && (git archive --format=tar main 2>/dev/null | tar -x -C staging 2>/dev/null || git archive --format=tar HEAD 2>/dev/null | tar -x -C staging 2>/dev/null) && rsync -av --delete --include='index.html' --include='*.html' --include='*.css' --include='*.js' --include='*.jpg' --include='*.jpeg' --include='*.png' --include='*.gif' --include='*.svg' --include='*.ico' --include='*.woff' --include='*.woff2' --include='*.ttf' --include='*.eot' --exclude='deploy.ps1' --exclude='nginx_*.conf' --exclude='post-receive' --exclude='README.md' --exclude='*.md' --exclude='SSL/' --exclude='*.sh' --exclude='*.sql' --exclude='*' staging/ public_html/ 2>&1 && chown -R www-data:www-data public_html && chmod -R 755 public_html && rm -rf staging"
     
     $deployResult = ssh -i $SSH_KEY -o StrictHostKeyChecking=accept-new $SERVER $deployCmd 2>&1
     
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "ВНИМАНИЕ: Деплой выполнился с ошибкой, пробуем альтернативный метод..." -ForegroundColor Yellow
-        # Альтернативный метод - копируем файлы напрямую
-        Write-Host "Копирование файлов напрямую..." -ForegroundColor Gray
+    # Если git archive не сработал, копируем файлы напрямую
+    if ($LASTEXITCODE -ne 0 -or $deployResult -match "error|fatal|failed") {
+        Write-Host "Копирование файлов напрямую (альтернативный метод)..." -ForegroundColor Yellow
         scp -i $SSH_KEY index.html style.css "${SERVER}:${WWW_ROOT}/public_html/" 2>&1 | Out-Null
         ssh -i $SSH_KEY -o StrictHostKeyChecking=accept-new $SERVER "chown -R www-data:www-data ${WWW_ROOT}/public_html && chmod -R 755 ${WWW_ROOT}/public_html" 2>&1 | Out-Null
+        Write-Host "Файлы скопированы напрямую." -ForegroundColor Green
+    } else {
+        Write-Host "Деплой на сервере выполнен успешно." -ForegroundColor Green
     }
     
     if ($LASTEXITCODE -eq 0) {
