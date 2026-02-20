@@ -101,6 +101,7 @@ function Register() {
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               required
+              
               placeholder="Повторите пароль"
             />
           </div>

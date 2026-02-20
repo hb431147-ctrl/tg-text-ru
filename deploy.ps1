@@ -114,27 +114,9 @@ function Deploy-ToServer {
     
     Write-Host "Отправка выполнена успешно." -ForegroundColor Green
     
-    # Деплой на сервере
-    Write-Host "Выполнение деплоя на сервере..." -ForegroundColor Gray
-    
-    # Используем git archive для извлечения файлов из bare репозитория
-    $deployCmd = "cd $WWW_ROOT && mkdir -p staging && (git archive --format=tar main 2>/dev/null | tar -x -C staging 2>/dev/null || git archive --format=tar HEAD 2>/dev/null | tar -x -C staging 2>/dev/null) && rsync -av --delete --include='index.html' --include='*.html' --include='*.css' --include='*.js' --include='*.jpg' --include='*.jpeg' --include='*.png' --include='*.gif' --include='*.svg' --include='*.ico' --include='*.woff' --include='*.woff2' --include='*.ttf' --include='*.eot' --exclude='deploy.ps1' --exclude='nginx_*.conf' --exclude='post-receive' --exclude='README.md' --exclude='*.md' --exclude='SSL/' --exclude='*.sh' --exclude='*.sql' --exclude='*' staging/ public_html/ 2>&1 && chown -R www-data:www-data public_html && chmod -R 755 public_html && rm -rf staging"
-    
-    $deployResult = ssh -i $SSH_KEY -o StrictHostKeyChecking=accept-new $SERVER $deployCmd 2>&1
-    
-    # Если git archive не сработал, копируем файлы напрямую
-    if ($LASTEXITCODE -ne 0 -or $deployResult -match "error|fatal|failed") {
-        Write-Host "Копирование файлов напрямую (альтернативный метод)..." -ForegroundColor Yellow
-        scp -i $SSH_KEY index.html "${SERVER}:${WWW_ROOT}/public_html/" 2>&1 | Out-Null
-        ssh -i $SSH_KEY -o StrictHostKeyChecking=accept-new $SERVER "chown -R www-data:www-data ${WWW_ROOT}/public_html && chmod -R 755 ${WWW_ROOT}/public_html" 2>&1 | Out-Null
-        Write-Host "Файлы скопированы напрямую." -ForegroundColor Green
-    } else {
-        Write-Host "Деплой на сервере выполнен успешно." -ForegroundColor Green
-    }
-    
-    if ($LASTEXITCODE -eq 0) {
-        Write-Host "Деплой на сервере выполнен успешно." -ForegroundColor Green
-    }
+    # Деплой на сервере выполняется автоматически через post-receive hook
+    Write-Host "Деплой на сервере будет выполнен автоматически через Git hook (post-receive)." -ForegroundColor Gray
+    Write-Host "Hook автоматически соберет React приложение и обновит файлы." -ForegroundColor Gray
 }
 
 # Функция для отправки в GitHub
@@ -182,30 +164,9 @@ if ($RollbackForward) {
 # Обычный деплой
 Write-Host "=== Деплой на сервер ===" -ForegroundColor Green
 
-# Проверка наличия Node.js и npm (опционально - сборка будет на сервере)
-if (Get-Command npm -ErrorAction SilentlyContinue) {
-    # Сборка React приложения локально (если npm доступен)
-    Write-Host "Сборка React приложения локально..." -ForegroundColor Yellow
-    if (Test-Path "package.json") {
-        # Устанавливаем зависимости если нужно
-        if (-not (Test-Path "node_modules")) {
-            Write-Host "Установка зависимостей..." -ForegroundColor Yellow
-            npm install 2>&1 | Out-Null
-        }
-        
-        # Собираем React приложение
-        Write-Host "Запуск сборки..." -ForegroundColor Yellow
-        npm run build 2>&1 | Out-Null
-        
-        if ($LASTEXITCODE -eq 0) {
-            Write-Host "Сборка завершена успешно." -ForegroundColor Green
-        } else {
-            Write-Host "Предупреждение: локальная сборка не удалась, сборка будет выполнена на сервере" -ForegroundColor Yellow
-        }
-    }
-} else {
-    Write-Host "npm не найден локально. Сборка будет выполнена на сервере." -ForegroundColor Yellow
-}
+# Сборка React приложения выполняется на сервере через post-receive hook
+# Это гарантирует, что собранные файлы всегда соответствуют окружению сервера
+Write-Host "Сборка React приложения будет выполнена на сервере через Git hook." -ForegroundColor Gray
 
 # Инициализация Git если нужно
 if (-not (Test-Path ".git")) {

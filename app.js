@@ -50,6 +50,8 @@ app.use((req, res, next) => {
         console.log('Headers:', JSON.stringify(req.headers));
         console.log('Body:', req.body);
         console.log('Content-Type:', req.get('Content-Type'));
+        console.log('Path:', req.path);
+        console.log('Original URL:', req.originalUrl);
     }
     next();
 });

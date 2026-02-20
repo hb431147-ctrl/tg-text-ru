@@ -68,9 +68,14 @@ if [ -f "package.json" ]; then
         cp -r ${STAGING_DIR}/dist/* ${DEPLOY_DIR}/
         echo "Проверка index.html после копирования..."
         if ! grep -q "/assets/" ${DEPLOY_DIR}/index.html 2>/dev/null; then
-            echo "ПРЕДУПРЕЖДЕНИЕ: index.html не содержит ссылок на /assets/"
-            cat ${DEPLOY_DIR}/index.html
+            echo "ОШИБКА: index.html не содержит ссылок на /assets/ - пересобираем..."
+            # Пересобираем если что-то пошло не так
+            npm run build
+            rm -rf ${DEPLOY_DIR}/*
+            cp -r ${STAGING_DIR}/dist/* ${DEPLOY_DIR}/
         fi
+        echo "Проверка файлов в public_html..."
+        ls -la ${DEPLOY_DIR}/assets/ 2>/dev/null || echo "ПРЕДУПРЕЖДЕНИЕ: папка assets не найдена!"
     else
         echo "ОШИБКА: Папка dist не найдена после сборки!"
         exit 1
