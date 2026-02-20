@@ -260,6 +260,12 @@ function processText(text, excludeWordsStr) {
 }
 
 /**
+ * Обработка OPTIONS для CORS preflight
+ */
+app.options('/api/auth/register', cors());
+app.options('/api/auth/login', cors());
+
+/**
  * API endpoint для регистрации
  */
 app.post('/api/auth/register', async (req, res) => {
