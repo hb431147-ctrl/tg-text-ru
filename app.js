@@ -288,6 +288,9 @@ app.options('/api/auth/login', cors());
  * API endpoint для регистрации
  */
 app.post('/api/auth/register', async (req, res) => {
+    console.log('=== Обработчик /api/auth/register вызван ===');
+    console.log('Request body:', req.body);
+    console.log('Request headers:', req.headers);
     try {
         const { email, password, name } = req.body;
 
