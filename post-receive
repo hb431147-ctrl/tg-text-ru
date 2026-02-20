@@ -116,6 +116,8 @@ if [ -f "${STAGING_DIR}/init_database.sql" ]; then
 fi
 if [ -f "${STAGING_DIR}/app.js" ]; then
     cp ${STAGING_DIR}/app.js ${WWW_ROOT}/
+    # Перезапускаем API сервис после обновления app.js
+    systemctl restart text-processor 2>&1 || true
 fi
 if [ -f "${STAGING_DIR}/package.json" ]; then
     cp ${STAGING_DIR}/package.json ${WWW_ROOT}/
