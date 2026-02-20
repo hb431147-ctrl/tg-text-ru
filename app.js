@@ -71,6 +71,10 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use((err, req, res, next) => {
     if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
         console.error('Ошибка парсинга JSON:', err.message);
+        console.error('URL:', req.url);
+        console.error('Method:', req.method);
+        console.error('Content-Type:', req.get('Content-Type'));
+        console.error('Body preview:', req.body ? JSON.stringify(req.body).substring(0, 200) : 'empty');
         return res.status(400).json({ error: 'Неверный формат JSON: ' + err.message });
     }
     next();
