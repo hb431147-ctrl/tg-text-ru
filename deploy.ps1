@@ -125,7 +125,7 @@ function Deploy-ToServer {
     # Если git archive не сработал, копируем файлы напрямую
     if ($LASTEXITCODE -ne 0 -or $deployResult -match "error|fatal|failed") {
         Write-Host "Копирование файлов напрямую (альтернативный метод)..." -ForegroundColor Yellow
-        scp -i $SSH_KEY index.html style.css "${SERVER}:${WWW_ROOT}/public_html/" 2>&1 | Out-Null
+        scp -i $SSH_KEY index.html "${SERVER}:${WWW_ROOT}/public_html/" 2>&1 | Out-Null
         ssh -i $SSH_KEY -o StrictHostKeyChecking=accept-new $SERVER "chown -R www-data:www-data ${WWW_ROOT}/public_html && chmod -R 755 ${WWW_ROOT}/public_html" 2>&1 | Out-Null
         Write-Host "Файлы скопированы напрямую." -ForegroundColor Green
     } else {
