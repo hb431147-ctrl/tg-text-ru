@@ -550,6 +550,22 @@ app.get('/', (req, res) => {
     });
 });
 
+// Обработка 404 для API endpoints
+app.use('/api', (req, res) => {
+    res.status(404).json({ error: 'API endpoint не найден' });
+});
+
+// Обработка всех остальных ошибок
+app.use((err, req, res, next) => {
+    console.error('Ошибка:', err);
+    if (req.path.startsWith('/api')) {
+        return res.status(err.status || 500).json({ 
+            error: err.message || 'Внутренняя ошибка сервера' 
+        });
+    }
+    next(err);
+});
+
 // Запуск сервера
 app.listen(PORT, '127.0.0.1', () => {
     console.log(`Text Processor API запущен на http://127.0.0.1:${PORT}`);
