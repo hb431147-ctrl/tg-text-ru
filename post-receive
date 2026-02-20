@@ -126,13 +126,37 @@ fi
 if [ -f "${STAGING_DIR}/init_database.sql" ]; then
     cp ${STAGING_DIR}/init_database.sql ${WWW_ROOT}/
 fi
+
+# Копируем app.js в директорию API (рабочая директория сервиса text-processor)
 if [ -f "${STAGING_DIR}/app.js" ]; then
-    cp ${STAGING_DIR}/app.js ${WWW_ROOT}/
+    API_DIR="${WWW_ROOT}/api"
+    mkdir -p ${API_DIR}
+    cp ${STAGING_DIR}/app.js ${API_DIR}/
+    echo "app.js скопирован в ${API_DIR}/"
+    
+    # Копируем package.json в директорию API если есть
+    if [ -f "${STAGING_DIR}/package.json" ]; then
+        cp ${STAGING_DIR}/package.json ${API_DIR}/
+        # Устанавливаем зависимости если нужно
+        cd ${API_DIR}
+        if [ ! -d "node_modules" ] && command -v npm &> /dev/null; then
+            echo "Установка зависимостей для API..."
+            npm install --production 2>&1 | tail -5
+        fi
+    fi
+    
     # Перезапускаем API сервис после обновления app.js
+    echo "Перезапуск сервиса text-processor..."
     systemctl restart text-processor 2>&1 || true
+    sleep 2
+    systemctl status text-processor --no-pager | head -5
 fi
-if [ -f "${STAGING_DIR}/package.json" ]; then
-    cp ${STAGING_DIR}/package.json ${WWW_ROOT}/
+
+# Копируем конфигурацию nginx
+if [ -f "${STAGING_DIR}/nginx_tg-text.ru.conf" ]; then
+    echo "Копирование конфигурации nginx..."
+    cp ${STAGING_DIR}/nginx_tg-text.ru.conf /etc/nginx/conf.d/tg-text.ru.conf
+    echo "Конфигурация nginx обновлена"
 fi
 
 # Устанавливаем правильные права
@@ -141,11 +165,15 @@ chmod -R 755 ${DEPLOY_DIR}
 
 # Проверяем конфигурацию nginx
 echo "Проверка конфигурации nginx..."
-nginx -t
-
-# Перезагружаем nginx (graceful reload - без прерывания работы)
-echo "Перезагрузка nginx..."
-systemctl reload nginx
+if nginx -t; then
+    # Перезагружаем nginx (graceful reload - без прерывания работы)
+    echo "Перезагрузка nginx..."
+    systemctl reload nginx
+    echo "Nginx перезагружен успешно"
+else
+    echo "ОШИБКА: Конфигурация nginx неверна! Nginx не перезагружен."
+    exit 1
+fi
 
 # Очищаем staging директорию
 rm -rf ${STAGING_DIR}

@@ -284,11 +284,17 @@ function processText(text, excludeWordsStr) {
 app.options('/api/auth/register', cors());
 app.options('/api/auth/login', cors());
 
+// Логируем регистрацию роутов
+console.log('Регистрация роута POST /api/auth/register');
+
 /**
  * API endpoint для регистрации
  */
 app.post('/api/auth/register', async (req, res) => {
-    console.log('=== Обработчик /api/auth/register вызван ===');
+    console.log('\n=== ОБРАБОТЧИК /api/auth/register ВЫЗВАН ===');
+    console.log('Method:', req.method);
+    console.log('Path:', req.path);
+    console.log('Original URL:', req.originalUrl);
     console.log('Request body:', req.body);
     console.log('Request headers:', req.headers);
     try {
@@ -579,8 +585,22 @@ app.get('/', (req, res) => {
 });
 
 // Обработка 404 для API endpoints
-app.use('/api', (req, res) => {
-    res.status(404).json({ error: 'API endpoint не найден' });
+app.use('/api', (req, res, next) => {
+    // Проверяем, был ли уже отправлен ответ
+    if (res.headersSent) {
+        return next();
+    }
+    
+    console.log('=== 404 для API endpoint ===');
+    console.log('Method:', req.method);
+    console.log('Path:', req.path);
+    console.log('Original URL:', req.originalUrl);
+    console.log('Base URL:', req.baseUrl);
+    console.log('Route:', req.route ? req.route.path : 'no route');
+    console.log('Headers:', JSON.stringify(req.headers));
+    
+    // Отправляем JSON ответ, а не HTML
+    res.status(404).json({ error: 'API endpoint не найден', path: req.path, method: req.method });
 });
 
 // Обработка всех остальных ошибок

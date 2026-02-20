@@ -88,6 +88,17 @@ function Rollback-Forward {
 function Deploy-ToServer {
     Write-Host "Отправка на сервер..." -ForegroundColor Yellow
     
+    # Проверка наличия необходимых файлов
+    if (-not (Test-Path "app.js")) {
+        Write-Host "ПРЕДУПРЕЖДЕНИЕ: app.js не найден в корне проекта!" -ForegroundColor Yellow
+    }
+    if (-not (Test-Path "nginx_tg-text.ru.conf")) {
+        Write-Host "ПРЕДУПРЕЖДЕНИЕ: nginx_tg-text.ru.conf не найден!" -ForegroundColor Yellow
+    }
+    if (-not (Test-Path "post-receive")) {
+        Write-Host "ПРЕДУПРЕЖДЕНИЕ: post-receive hook не найден!" -ForegroundColor Yellow
+    }
+    
     # Добавление/обновление remote
     $remotes = git remote
     if ($remotes -notcontains "production") {
@@ -116,7 +127,11 @@ function Deploy-ToServer {
     
     # Деплой на сервере выполняется автоматически через post-receive hook
     Write-Host "Деплой на сервере будет выполнен автоматически через Git hook (post-receive)." -ForegroundColor Gray
-    Write-Host "Hook автоматически соберет React приложение и обновит файлы." -ForegroundColor Gray
+    Write-Host "Hook автоматически:" -ForegroundColor Gray
+    Write-Host "  - Соберет React приложение" -ForegroundColor Gray
+    Write-Host "  - Скопирует app.js в /var/www/tg-text.ru/api/" -ForegroundColor Gray
+    Write-Host "  - Скопирует nginx конфигурацию в /etc/nginx/conf.d/" -ForegroundColor Gray
+    Write-Host "  - Перезапустит сервисы (text-processor, nginx)" -ForegroundColor Gray
 }
 
 # Функция для отправки в GitHub
