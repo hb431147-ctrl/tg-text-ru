@@ -48,7 +48,8 @@ app.use((req, res, next) => {
     console.log(`${new Date().toISOString()} ${req.method} ${req.url}`);
     if (req.method === 'POST' && req.path.startsWith('/api')) {
         console.log('Headers:', JSON.stringify(req.headers));
-        console.log('Body (raw):', req.body);
+        console.log('Body:', req.body);
+        console.log('Content-Type:', req.get('Content-Type'));
     }
     next();
 });

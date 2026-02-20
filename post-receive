@@ -63,7 +63,14 @@ if [ -f "package.json" ]; then
     # Копируем собранные файлы из dist в public_html
     if [ -d "dist" ]; then
         echo "Копирование собранных файлов из dist..."
-        rsync -av --delete ${STAGING_DIR}/dist/ ${DEPLOY_DIR}/
+        # Удаляем все старые файлы и копируем новые
+        rm -rf ${DEPLOY_DIR}/*
+        cp -r ${STAGING_DIR}/dist/* ${DEPLOY_DIR}/
+        echo "Проверка index.html после копирования..."
+        if ! grep -q "/assets/" ${DEPLOY_DIR}/index.html 2>/dev/null; then
+            echo "ПРЕДУПРЕЖДЕНИЕ: index.html не содержит ссылок на /assets/"
+            cat ${DEPLOY_DIR}/index.html
+        fi
     else
         echo "ОШИБКА: Папка dist не найдена после сборки!"
         exit 1
