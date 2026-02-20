@@ -43,15 +43,14 @@ function getUserIP(req) {
            'unknown';
 }
 
-// Middleware для логирования
+// Middleware для логирования (ПЕРЕД парсингом JSON)
 app.use((req, res, next) => {
-    console.log(`${new Date().toISOString()} ${req.method} ${req.url}`);
-    if (req.method === 'POST' && req.path.startsWith('/api')) {
-        console.log('Headers:', JSON.stringify(req.headers));
-        console.log('Body:', req.body);
-        console.log('Content-Type:', req.get('Content-Type'));
+    if (req.path.startsWith('/api')) {
+        console.log(`\n=== ${new Date().toISOString()} ${req.method} ${req.url} ===`);
         console.log('Path:', req.path);
         console.log('Original URL:', req.originalUrl);
+        console.log('Headers:', JSON.stringify(req.headers));
+        console.log('Content-Type:', req.get('Content-Type'));
     }
     next();
 });
@@ -73,6 +72,15 @@ app.use(express.json({
     strict: false
 }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// Логирование body после парсинга
+app.use((req, res, next) => {
+    if (req.method === 'POST' && req.path.startsWith('/api')) {
+        console.log('Body после парсинга:', req.body);
+        console.log('Body type:', typeof req.body);
+    }
+    next();
+});
 
 // Обработка ошибок парсинга JSON
 app.use((err, req, res, next) => {
