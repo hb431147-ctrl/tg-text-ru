@@ -36,8 +36,16 @@ export const AuthProvider = ({ children }) => {
         body: JSON.stringify({ email, password }),
       });
 
+      // Проверяем Content-Type ответа
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        const text = await response.text();
+        console.error('Ожидался JSON, получен:', contentType, text.substring(0, 200));
+        throw new Error(`Сервер вернул неверный формат ответа. Статус: ${response.status}`);
+      }
+
       if (!response.ok) {
-        const error = await response.json();
+        const error = await response.json().catch(() => ({ error: `Ошибка ${response.status}: ${response.statusText}` }));
         throw new Error(error.error || 'Ошибка авторизации');
       }
 
@@ -50,6 +58,7 @@ export const AuthProvider = ({ children }) => {
       
       return { success: true };
     } catch (error) {
+      console.error('Ошибка авторизации:', error);
       return { success: false, error: error.message };
     }
   };
@@ -68,8 +77,16 @@ export const AuthProvider = ({ children }) => {
         body: JSON.stringify({ email, password, name }),
       });
 
+      // Проверяем Content-Type ответа
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        const text = await response.text();
+        console.error('Ожидался JSON, получен:', contentType, text.substring(0, 200));
+        throw new Error(`Сервер вернул неверный формат ответа. Статус: ${response.status}`);
+      }
+
       if (!response.ok) {
-        const error = await response.json();
+        const error = await response.json().catch(() => ({ error: `Ошибка ${response.status}: ${response.statusText}` }));
         throw new Error(error.error || 'Ошибка регистрации');
       }
 
@@ -82,6 +99,7 @@ export const AuthProvider = ({ children }) => {
       
       return { success: true };
     } catch (error) {
+      console.error('Ошибка регистрации:', error);
       return { success: false, error: error.message };
     }
   };
