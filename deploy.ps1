@@ -182,9 +182,29 @@ if ($RollbackForward) {
 # Обычный деплой
 Write-Host "=== Деплой на сервер ===" -ForegroundColor Green
 
-if (-not (Test-Path "index.html")) {
-    Write-Host "ОШИБКА: index.html не найден!" -ForegroundColor Red
-    exit 1
+# Проверка наличия Node.js и npm (опционально - сборка будет на сервере)
+if (Get-Command npm -ErrorAction SilentlyContinue) {
+    # Сборка React приложения локально (если npm доступен)
+    Write-Host "Сборка React приложения локально..." -ForegroundColor Yellow
+    if (Test-Path "package.json") {
+        # Устанавливаем зависимости если нужно
+        if (-not (Test-Path "node_modules")) {
+            Write-Host "Установка зависимостей..." -ForegroundColor Yellow
+            npm install 2>&1 | Out-Null
+        }
+        
+        # Собираем React приложение
+        Write-Host "Запуск сборки..." -ForegroundColor Yellow
+        npm run build 2>&1 | Out-Null
+        
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "Сборка завершена успешно." -ForegroundColor Green
+        } else {
+            Write-Host "Предупреждение: локальная сборка не удалась, сборка будет выполнена на сервере" -ForegroundColor Yellow
+        }
+    }
+} else {
+    Write-Host "npm не найден локально. Сборка будет выполнена на сервере." -ForegroundColor Yellow
 }
 
 # Инициализация Git если нужно

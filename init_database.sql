@@ -26,6 +26,24 @@ CREATE TABLE IF NOT EXISTS user_requests (
     INDEX idx_created_at (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Таблица для хранения запросов пользователей';
 
--- Показать структуру таблицы
+-- Создание таблицы пользователей
+CREATE TABLE IF NOT EXISTS users (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    email VARCHAR(255) NOT NULL UNIQUE COMMENT 'Email пользователя',
+    password_hash VARCHAR(255) NOT NULL COMMENT 'Хеш пароля',
+    name VARCHAR(255) COMMENT 'Имя пользователя',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT 'Время регистрации',
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT 'Время последнего обновления',
+    INDEX idx_email (email)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Таблица пользователей';
+
+-- Обновление таблицы user_requests для связи с пользователями
+ALTER TABLE user_requests 
+ADD COLUMN IF NOT EXISTS user_id INT NULL COMMENT 'ID пользователя',
+ADD FOREIGN KEY IF NOT EXISTS fk_user_requests_user (user_id) REFERENCES users(id) ON DELETE SET NULL,
+ADD INDEX IF NOT EXISTS idx_user_id (user_id);
+
+-- Показать структуру таблиц
 DESCRIBE user_requests;
+DESCRIBE users;
 

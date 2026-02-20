@@ -6,9 +6,12 @@
 const express = require('express');
 const cors = require('cors');
 const mysql = require('mysql2/promise');
+const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production-2024';
 
 // Настройки подключения к MySQL
 const dbConfig = {
@@ -72,6 +75,43 @@ app.use((err, req, res, next) => {
     }
     next();
 });
+
+/**
+ * Middleware для проверки JWT токена
+ */
+function authenticateToken(req, res, next) {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
+
+    if (!token) {
+        return res.status(401).json({ error: 'Токен не предоставлен' });
+    }
+
+    jwt.verify(token, JWT_SECRET, (err, user) => {
+        if (err) {
+            return res.status(403).json({ error: 'Недействительный токен' });
+        }
+        req.user = user;
+        next();
+    });
+}
+
+/**
+ * Опциональная аутентификация (для обратной совместимости)
+ */
+function optionalAuth(req, res, next) {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+
+    if (token) {
+        jwt.verify(token, JWT_SECRET, (err, user) => {
+            if (!err) {
+                req.user = user;
+            }
+        });
+    }
+    next();
+}
 
 /**
  * Получить корень слова (упрощенный алгоритм)
@@ -220,9 +260,125 @@ function processText(text, excludeWordsStr) {
 }
 
 /**
+ * API endpoint для регистрации
+ */
+app.post('/api/auth/register', async (req, res) => {
+    try {
+        const { email, password, name } = req.body;
+
+        if (!email || !password) {
+            return res.status(400).json({ error: 'Email и пароль обязательны' });
+        }
+
+        if (password.length < 6) {
+            return res.status(400).json({ error: 'Пароль должен содержать минимум 6 символов' });
+        }
+
+        if (!dbPool) {
+            return res.status(503).json({ error: 'База данных не доступна' });
+        }
+
+        // Проверяем, существует ли пользователь
+        const [existingUsers] = await dbPool.execute(
+            'SELECT id FROM users WHERE email = ?',
+            [email]
+        );
+
+        if (existingUsers.length > 0) {
+            return res.status(400).json({ error: 'Пользователь с таким email уже существует' });
+        }
+
+        // Хешируем пароль
+        const passwordHash = await bcrypt.hash(password, 10);
+
+        // Создаем пользователя
+        const [result] = await dbPool.execute(
+            'INSERT INTO users (email, password_hash, name) VALUES (?, ?, ?)',
+            [email, passwordHash, name || null]
+        );
+
+        const userId = result.insertId;
+
+        // Создаем JWT токен
+        const token = jwt.sign(
+            { id: userId, email: email },
+            JWT_SECRET,
+            { expiresIn: '30d' }
+        );
+
+        return res.status(201).json({
+            token: token,
+            user: {
+                id: userId,
+                email: email,
+                name: name || null
+            }
+        });
+    } catch (error) {
+        console.error('Ошибка регистрации:', error);
+        return res.status(500).json({ error: `Ошибка регистрации: ${error.message}` });
+    }
+});
+
+/**
+ * API endpoint для входа
+ */
+app.post('/api/auth/login', async (req, res) => {
+    try {
+        const { email, password } = req.body;
+
+        if (!email || !password) {
+            return res.status(400).json({ error: 'Email и пароль обязательны' });
+        }
+
+        if (!dbPool) {
+            return res.status(503).json({ error: 'База данных не доступна' });
+        }
+
+        // Находим пользователя
+        const [users] = await dbPool.execute(
+            'SELECT id, email, password_hash, name FROM users WHERE email = ?',
+            [email]
+        );
+
+        if (users.length === 0) {
+            return res.status(401).json({ error: 'Неверный email или пароль' });
+        }
+
+        const user = users[0];
+
+        // Проверяем пароль
+        const passwordMatch = await bcrypt.compare(password, user.password_hash);
+
+        if (!passwordMatch) {
+            return res.status(401).json({ error: 'Неверный email или пароль' });
+        }
+
+        // Создаем JWT токен
+        const token = jwt.sign(
+            { id: user.id, email: user.email },
+            JWT_SECRET,
+            { expiresIn: '30d' }
+        );
+
+        return res.json({
+            token: token,
+            user: {
+                id: user.id,
+                email: user.email,
+                name: user.name
+            }
+        });
+    } catch (error) {
+        console.error('Ошибка входа:', error);
+        return res.status(500).json({ error: `Ошибка входа: ${error.message}` });
+    }
+});
+
+/**
  * API endpoint для обработки текста
  */
-app.post('/api/process', async (req, res) => {
+app.post('/api/process', optionalAuth, async (req, res) => {
     try {
         console.log('Получен запрос:', {
             method: req.method,
@@ -263,10 +419,11 @@ app.post('/api/process', async (req, res) => {
                 const requestText = text.trim();
                 const excludeWords = exclude_words ? exclude_words.trim() : null;
                 const resultText = result.result || '';
+                const userId = req.user ? req.user.id : null;
                 
                 await dbPool.execute(
-                    'INSERT INTO user_requests (user_ip, user_agent, request_text, exclude_words, result_text) VALUES (?, ?, ?, ?, ?)',
-                    [userIP, userAgent, requestText, excludeWords, resultText]
+                    'INSERT INTO user_requests (user_ip, user_agent, request_text, exclude_words, result_text, user_id) VALUES (?, ?, ?, ?, ?, ?)',
+                    [userIP, userAgent, requestText, excludeWords, resultText, userId]
                 );
                 console.log('Запрос сохранен в базу данных');
             } catch (dbError) {
@@ -286,7 +443,7 @@ app.post('/api/process', async (req, res) => {
 /**
  * API endpoint для получения истории запросов
  */
-app.get('/api/history', async (req, res) => {
+app.get('/api/history', authenticateToken, async (req, res) => {
     try {
         if (!dbPool) {
             return res.status(503).json({ error: 'База данных не доступна' });
@@ -294,18 +451,18 @@ app.get('/api/history', async (req, res) => {
         
         const limit = parseInt(req.query.limit) || 50;
         const offset = parseInt(req.query.offset) || 0;
-        const userIP = req.query.ip || getUserIP(req);
+        const userId = req.user.id;
         
-        // Получаем историю запросов (LIMIT и OFFSET не могут быть параметрами)
+        // Получаем историю запросов пользователя (LIMIT и OFFSET не могут быть параметрами)
         const [rows] = await dbPool.execute(
-            `SELECT id, user_ip, request_text, exclude_words, result_text, created_at FROM user_requests WHERE user_ip = ? ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`,
-            [userIP]
+            `SELECT id, user_ip, request_text, exclude_words, result_text, created_at FROM user_requests WHERE user_id = ? ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`,
+            [userId]
         );
         
         // Получаем общее количество запросов
         const [countRows] = await dbPool.execute(
-            'SELECT COUNT(*) as total FROM user_requests WHERE user_ip = ?',
-            [userIP]
+            'SELECT COUNT(*) as total FROM user_requests WHERE user_id = ?',
+            [userId]
         );
         
         return res.json({

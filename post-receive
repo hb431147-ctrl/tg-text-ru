@@ -32,40 +32,78 @@ git checkout -f main 2>/dev/null || git checkout -f
 unset GIT_DIR
 unset GIT_WORK_TREE
 
-# Проверяем наличие index.html
-if [ ! -f "${STAGING_DIR}/index.html" ]; then
-    echo "ОШИБКА: index.html не найден в репозитории!"
-    exit 1
-fi
+# Сборка React приложения на сервере
+echo "Сборка React приложения..."
+cd ${STAGING_DIR}
 
-# Копируем только файлы сайта из staging в production атомарно
-echo "Копирование файлов сайта..."
-# Копируем только index.html и другие файлы сайта (HTML, CSS, JS, изображения)
-# Исключаем служебные файлы: deploy.ps1, nginx_*.conf, post-receive, README.md, DEPLOY_GUIDE.md, SSL/
-rsync -av --delete \
-  --include='index.html' \
-  --include='*.html' \
-  --include='*.css' \
-  --include='*.js' \
-  --include='*.jpg' \
-  --include='*.jpeg' \
-  --include='*.png' \
-  --include='*.gif' \
-  --include='*.svg' \
-  --include='*.ico' \
-  --include='*.woff' \
-  --include='*.woff2' \
-  --include='*.ttf' \
-  --include='*.eot' \
-  --exclude='deploy.ps1' \
-  --exclude='nginx_*.conf' \
-  --exclude='post-receive' \
-  --exclude='README.md' \
-  --exclude='DEPLOY_GUIDE.md' \
-  --exclude='SSL/' \
-  --exclude='*.sh' \
-  ${STAGING_DIR}/ ${DEPLOY_DIR}/ || \
-  (cp ${STAGING_DIR}/index.html ${DEPLOY_DIR}/ 2>/dev/null || true)
+if [ -f "package.json" ]; then
+    # Проверяем наличие Node.js и npm
+    if ! command -v npm &> /dev/null; then
+        echo "ОШИБКА: npm не установлен на сервере!"
+        exit 1
+    fi
+    
+    # Устанавливаем зависимости если нужно
+    if [ ! -d "node_modules" ]; then
+        echo "Установка зависимостей..."
+        npm install --production=false
+    fi
+    
+    # Собираем React приложение
+    echo "Запуск сборки..."
+    npm run build
+    
+    if [ $? -ne 0 ]; then
+        echo "ОШИБКА: Сборка не удалась!"
+        exit 1
+    fi
+    
+    echo "Сборка завершена успешно."
+    
+    # Копируем собранные файлы из dist в public_html
+    if [ -d "dist" ]; then
+        echo "Копирование собранных файлов из dist..."
+        rsync -av --delete ${STAGING_DIR}/dist/ ${DEPLOY_DIR}/
+    else
+        echo "ОШИБКА: Папка dist не найдена после сборки!"
+        exit 1
+    fi
+else
+    echo "Предупреждение: package.json не найден, используем старые файлы"
+    
+    # Проверяем наличие index.html
+    if [ ! -f "${STAGING_DIR}/index.html" ]; then
+        echo "ОШИБКА: index.html не найден в репозитории!"
+        exit 1
+    fi
+    
+    # Копируем только файлы сайта из staging в production атомарно
+    echo "Копирование файлов сайта..."
+    rsync -av --delete \
+      --include='index.html' \
+      --include='*.html' \
+      --include='*.css' \
+      --include='*.js' \
+      --include='*.jpg' \
+      --include='*.jpeg' \
+      --include='*.png' \
+      --include='*.gif' \
+      --include='*.svg' \
+      --include='*.ico' \
+      --include='*.woff' \
+      --include='*.woff2' \
+      --include='*.ttf' \
+      --include='*.eot' \
+      --exclude='deploy.ps1' \
+      --exclude='nginx_*.conf' \
+      --exclude='post-receive' \
+      --exclude='README.md' \
+      --exclude='DEPLOY_GUIDE.md' \
+      --exclude='SSL/' \
+      --exclude='*.sh' \
+      ${STAGING_DIR}/ ${DEPLOY_DIR}/ || \
+      (cp ${STAGING_DIR}/index.html ${DEPLOY_DIR}/ 2>/dev/null || true)
+fi
 
 # Копируем служебные файлы (.sh, .sql) в корень репозитория (не в public_html)
 echo "Копирование служебных файлов..."
