@@ -496,6 +496,11 @@ app.post('/api/settings', authenticateToken, async (req, res) => {
  */
 app.post('/api/process', optionalAuth, async (req, res) => {
     try {
+        if (req.body && (req.body.email !== undefined || req.body.password !== undefined)) {
+            return res.status(400).json({
+                error: 'Авторизация только по заголовку Authorization: Bearer <токен>. Не передавайте email и password в теле запроса. Токен получите через POST /api/auth/login.'
+            });
+        }
         let text = req.body?.text || req.body?.textInput || '';
         let exclude_words = req.body?.exclude_words || req.body?.excludeWords || req.body?.exclude || '';
         let promptTemplate = req.body?.prompt_template;
