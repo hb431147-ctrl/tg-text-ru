@@ -99,7 +99,26 @@ function Deploy-ToServer {
         throw "git push failed"
     }
 
-    Write-Host "Push OK. Deploy runs on server via post-receive hook." -ForegroundColor Green
+    Write-Host "Push OK." -ForegroundColor Green
+}
+
+function Deploy-ApiOnServer {
+    # Явно копируем app.js, bot.js и unit-файлы на сервер и перезапускаем сервисы — чтобы точно запускались актуальные файлы
+    $apiDir = "$WWW_ROOT/api"
+    Write-Host "Uploading API and services..." -ForegroundColor Yellow
+    scp -i $SSH_KEY -o StrictHostKeyChecking=accept-new app.js "${SERVER}:${apiDir}/" 2>&1 | Out-Null
+    if (Test-Path "bot.js") {
+        scp -i $SSH_KEY -o StrictHostKeyChecking=accept-new bot.js "${SERVER}:${apiDir}/" 2>&1 | Out-Null
+    }
+    scp -i $SSH_KEY -o StrictHostKeyChecking=accept-new text-processor.service "${SERVER}:/etc/systemd/system/" 2>&1 | Out-Null
+    if (Test-Path "telegram-bot.service") {
+        scp -i $SSH_KEY -o StrictHostKeyChecking=accept-new telegram-bot.service "${SERVER}:/etc/systemd/system/" 2>&1 | Out-Null
+    }
+    $restart = "systemctl daemon-reload; systemctl restart text-processor; systemctl restart telegram-bot 2>/dev/null; echo API_OK"
+    $out = ssh -i $SSH_KEY -o StrictHostKeyChecking=accept-new $SERVER $restart 2>&1
+    if ($out -match "API_OK") {
+        Write-Host "API and services updated and restarted." -ForegroundColor Green
+    }
 }
 
 function Deploy-Frontend {
@@ -144,7 +163,7 @@ function Deploy-FrontendOnServer {
     if (-not (Test-Path "package.json")) { return }
     Write-Host "Building frontend on server..." -ForegroundColor Yellow
     $buildDir = "$WWW_ROOT/build_tmp"
-    $cmd = "mkdir -p $buildDir && cd $WWW_ROOT && export GIT_DIR=$WWW_ROOT/.git GIT_WORK_TREE=$buildDir && git checkout -f main && unset GIT_DIR GIT_WORK_TREE && cd $buildDir && export PATH=/usr/bin:/bin && npm install --production=false 2>/dev/null; npm run build && rm -rf $WWW_ROOT/public_html/* && cp -r dist/* $WWW_ROOT/public_html/ && chown -R www-data:www-data $WWW_ROOT/public_html && rm -rf $buildDir && echo DEPLOY_OK"
+    $cmd = "rm -rf $buildDir && mkdir -p $buildDir && cd $WWW_ROOT && export GIT_DIR=$WWW_ROOT/.git GIT_WORK_TREE=$buildDir && git checkout -f main && unset GIT_DIR GIT_WORK_TREE && cd $buildDir && export PATH=/usr/bin:/bin && npm install --production=false 2>/dev/null; npm run build && rm -rf $WWW_ROOT/public_html/* && cp -r dist/* $WWW_ROOT/public_html/ && chown -R www-data:www-data $WWW_ROOT/public_html && rm -rf $buildDir && echo DEPLOY_OK"
     $out = ssh -i $SSH_KEY -o StrictHostKeyChecking=accept-new $SERVER $cmd 2>&1
     if ($out -match "DEPLOY_OK") {
         Write-Host "Frontend built and deployed on server." -ForegroundColor Green
@@ -204,6 +223,7 @@ if (-not [string]::IsNullOrWhiteSpace($status)) {
 }
 
 Deploy-ToServer
+Deploy-ApiOnServer
 Deploy-Frontend
 Deploy-FrontendOnServer
 Deploy-ToGitHub
