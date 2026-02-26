@@ -139,6 +139,20 @@ function Deploy-Frontend {
     Write-Host "Frontend uploaded." -ForegroundColor Green
 }
 
+function Deploy-FrontendOnServer {
+    # Сборка фронта на сервере после push — чтобы обновления всегда попадали на сайт
+    if (-not (Test-Path "package.json")) { return }
+    Write-Host "Building frontend on server..." -ForegroundColor Yellow
+    $cmd = "cd $WWW_ROOT && export PATH=/usr/bin:/bin && git checkout -f main && npm run build && rm -rf public_html/* && cp -r dist/* public_html/ && chown -R www-data:www-data public_html && find public_html -type d -exec chmod 755 {} \; && find public_html -type f -exec chmod 644 {} \; && echo DEPLOY_OK"
+    $out = ssh -i $SSH_KEY -o StrictHostKeyChecking=accept-new $SERVER $cmd 2>&1
+    if ($out -match "DEPLOY_OK") {
+        Write-Host "Frontend built and deployed on server." -ForegroundColor Green
+    } else {
+        Write-Host $out -ForegroundColor Gray
+        Write-Host "WARNING: Server build failed. Check output above." -ForegroundColor Yellow
+    }
+}
+
 function Deploy-ToGitHub {
     Write-Host "Pushing to GitHub..." -ForegroundColor Yellow
     $remotes = git remote
@@ -190,6 +204,7 @@ if (-not [string]::IsNullOrWhiteSpace($status)) {
 
 Deploy-ToServer
 Deploy-Frontend
+Deploy-FrontendOnServer
 Deploy-ToGitHub
 
 Write-Host "=== Deploy finished ===" -ForegroundColor Green
