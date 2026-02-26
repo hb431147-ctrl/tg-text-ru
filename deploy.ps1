@@ -102,6 +102,32 @@ function Deploy-ToServer {
     Write-Host "Push OK. Deploy runs on server via post-receive hook." -ForegroundColor Green
 }
 
+function Deploy-Frontend {
+    # Build React locally and upload to server (server-side build often fails in hook)
+    if (-not (Test-Path "package.json")) { return }
+    Write-Host "Building React locally..." -ForegroundColor Yellow
+    npm run build 2>&1 | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "WARNING: npm run build failed, skipping frontend upload" -ForegroundColor Yellow
+        return
+    }
+    if (-not (Test-Path "dist\index.html")) {
+        Write-Host "WARNING: dist\index.html not found, skipping frontend upload" -ForegroundColor Yellow
+        return
+    }
+    $pub = "${WWW_ROOT}/public_html"
+    Write-Host "Uploading dist to server..." -ForegroundColor Yellow
+    $scp = "scp -i `"$SSH_KEY`" -o StrictHostKeyChecking=accept-new -r dist\* ${SERVER}:${pub}/"
+    Invoke-Expression $scp
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "WARNING: SCP upload failed" -ForegroundColor Yellow
+        return
+    }
+    $fix = "chown -R www-data:www-data $pub; find $pub -type d -exec chmod 755 {} \; ; find $pub -type f -exec chmod 644 {} \;"
+    ssh -i $SSH_KEY -o StrictHostKeyChecking=accept-new $SERVER $fix 2>&1 | Out-Null
+    Write-Host "Frontend uploaded." -ForegroundColor Green
+}
+
 function Deploy-ToGitHub {
     Write-Host "Pushing to GitHub..." -ForegroundColor Yellow
     $remotes = git remote
@@ -137,7 +163,6 @@ if ($RollbackForward) {
 }
 
 Write-Host "=== Deploy ===" -ForegroundColor Green
-Write-Host "React build runs on server via hook." -ForegroundColor Gray
 
 if (-not (Test-Path ".git")) {
     Write-Host "Init Git..." -ForegroundColor Yellow
@@ -153,6 +178,7 @@ if (-not [string]::IsNullOrWhiteSpace($status)) {
 }
 
 Deploy-ToServer
+Deploy-Frontend
 Deploy-ToGitHub
 
 Write-Host "=== Deploy finished ===" -ForegroundColor Green
