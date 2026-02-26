@@ -32,6 +32,8 @@ CREATE TABLE IF NOT EXISTS users (
     email VARCHAR(255) NOT NULL UNIQUE COMMENT 'Email пользователя',
     password_hash VARCHAR(255) NOT NULL COMMENT 'Хеш пароля',
     name VARCHAR(255) COMMENT 'Имя пользователя',
+    prompt_template TEXT NULL COMMENT 'Промпт с {text} и {exc}',
+    request_count INT NOT NULL DEFAULT 1 COMMENT 'Количество запросов подряд (1-10)',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT 'Время регистрации',
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT 'Время последнего обновления',
     INDEX idx_email (email)

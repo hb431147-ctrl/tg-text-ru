@@ -8,6 +8,7 @@ User=http
 WorkingDirectory=/var/www/tg-text.ru/api
 Environment="NODE_ENV=production"
 Environment="PORT=5000"
+Environment="DEEPSEEK_API_KEY=sk-2666045195f14e099967e44af1e0b846"
 ExecStart=/usr/bin/node app.js
 Restart=always
 RestartSec=10

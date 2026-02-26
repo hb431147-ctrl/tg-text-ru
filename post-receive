@@ -127,30 +127,58 @@ if [ -f "${STAGING_DIR}/init_database.sql" ]; then
     cp ${STAGING_DIR}/init_database.sql ${WWW_ROOT}/
 fi
 
-# Копируем app.js в директорию API (рабочая директория сервиса text-processor)
+# Директория API (app.js, bot.js, сервисы text-processor и telegram-bot)
+API_DIR="${WWW_ROOT}/api"
+mkdir -p ${API_DIR}
+
+# Копируем app.js и bot.js в API
 if [ -f "${STAGING_DIR}/app.js" ]; then
-    API_DIR="${WWW_ROOT}/api"
-    mkdir -p ${API_DIR}
     cp ${STAGING_DIR}/app.js ${API_DIR}/
     echo "app.js скопирован в ${API_DIR}/"
-    
-    # Копируем package.json в директорию API если есть
-    if [ -f "${STAGING_DIR}/package.json" ]; then
-        cp ${STAGING_DIR}/package.json ${API_DIR}/
-        # Устанавливаем зависимости если нужно
-        cd ${API_DIR}
-        if [ ! -d "node_modules" ] && command -v npm &> /dev/null; then
-            echo "Установка зависимостей для API..."
-            npm install --production 2>&1 | tail -5
-        fi
-    fi
-    
-    # Перезапускаем API сервис после обновления app.js
-    echo "Перезапуск сервиса text-processor..."
-    systemctl restart text-processor 2>&1 || true
-    sleep 2
-    systemctl status text-processor --no-pager | head -5
 fi
+if [ -f "${STAGING_DIR}/bot.js" ]; then
+    cp ${STAGING_DIR}/bot.js ${API_DIR}/
+    echo "bot.js скопирован в ${API_DIR}/"
+fi
+
+# Зависимости API (для app.js и bot.js)
+if [ -f "${STAGING_DIR}/package.json" ]; then
+    cp ${STAGING_DIR}/package.json ${API_DIR}/
+    cd ${API_DIR}
+    if [ ! -d "node_modules" ] && command -v npm &> /dev/null; then
+        echo "Установка зависимостей для API..."
+        npm install --production 2>&1 | tail -5
+    fi
+    if ! npm list node-telegram-bot-api &>/dev/null; then
+        npm install node-telegram-bot-api 2>&1 | tail -3
+    fi
+    cd ${STAGING_DIR}
+fi
+
+# Миграция БД: prompt_template и request_count (если ещё нет — иначе ошибку игнорируем)
+if [ -f "${STAGING_DIR}/migrations/add_prompt_and_count.sql" ]; then
+    echo "Проверка миграции БД (prompt_template, request_count)..."
+    mysql -u tg_text_user -ptg_text_password_2024 tg_text_db < "${STAGING_DIR}/migrations/add_prompt_and_count.sql" 2>/dev/null || true
+fi
+
+# Копируем unit-файлы systemd и перезапускаем сервисы
+if [ -f "${STAGING_DIR}/text-processor.service" ]; then
+    cp ${STAGING_DIR}/text-processor.service /etc/systemd/system/
+    echo "text-processor.service обновлён"
+fi
+if [ -f "${STAGING_DIR}/telegram-bot.service" ]; then
+    cp ${STAGING_DIR}/telegram-bot.service /etc/systemd/system/
+    echo "telegram-bot.service обновлён"
+fi
+systemctl daemon-reload 2>/dev/null || true
+echo "Перезапуск сервиса text-processor..."
+systemctl restart text-processor 2>&1 || true
+if systemctl is-enabled telegram-bot &>/dev/null; then
+    echo "Перезапуск сервиса telegram-bot..."
+    systemctl restart telegram-bot 2>&1 || true
+fi
+sleep 2
+systemctl status text-processor --no-pager | head -5
 
 # Копируем конфигурацию nginx
 if [ -f "${STAGING_DIR}/nginx_tg-text.ru.conf" ]; then
@@ -173,6 +201,13 @@ if nginx -t; then
 else
     echo "ОШИБКА: Конфигурация nginx неверна! Nginx не перезагружен."
     exit 1
+fi
+
+# Обновляем сам hook post-receive из репозитория (чтобы следующий деплой использовал актуальную версию)
+if [ -f "${STAGING_DIR}/post-receive" ]; then
+    cp "${STAGING_DIR}/post-receive" "${GIT_DIR}/hooks/post-receive"
+    chmod +x "${GIT_DIR}/hooks/post-receive"
+    echo "post-receive hook обновлён"
 fi
 
 # Очищаем staging директорию

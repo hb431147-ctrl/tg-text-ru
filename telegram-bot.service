@@ -1,0 +1,25 @@
+[Unit]
+Description=Telegram Bot for Text Processor
+After=network.target mysql.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/var/www/tg-text.ru/api
+Environment="NODE_ENV=production"
+Environment="TELEGRAM_BOT_TOKEN=8527416853:AAG8EKiBVvaEJYpoYNk6BVOKbjOZlWvv56o"
+Environment="DB_HOST=localhost"
+Environment="DB_USER=tg_text_user"
+Environment="DB_PASSWORD=tg_text_password_2024"
+Environment="DB_NAME=tg_text_db"
+Environment="JWT_SECRET=your-secret-key-change-in-production-2024"
+Environment="DEEPSEEK_API_KEY=sk-2666045195f14e099967e44af1e0b846"
+ExecStart=/usr/bin/node bot.js
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+

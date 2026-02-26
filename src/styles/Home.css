@@ -342,3 +342,89 @@ input[type="text"] {
     background: #764ba2;
 }
 
+/* Modal: prompt and count */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.modal-content {
+    background: white;
+    border-radius: 12px;
+    padding: 24px;
+    max-width: 560px;
+    width: 90%;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+
+.modal-content h3 {
+    margin: 0 0 16px 0;
+    color: #333;
+}
+
+.modal-content .form-group {
+    margin-bottom: 16px;
+}
+
+.modal-content textarea {
+    min-height: 140px;
+}
+
+.modal-actions {
+    display: flex;
+    gap: 12px;
+    margin-top: 20px;
+}
+
+.modal-actions .btn {
+    flex: 1;
+    margin-top: 0;
+}
+
+.btn-secondary {
+    background: #718096;
+}
+
+.btn-secondary:hover:not(:disabled) {
+    box-shadow: 0 5px 15px rgba(113, 128, 150, 0.4);
+}
+
+.prompt-hint {
+    font-size: 0.85em;
+    color: #666;
+    margin-top: 6px;
+}
+
+.result-list {
+    margin-top: 12px;
+}
+
+.result-list .result-item {
+    margin-bottom: 16px;
+    padding: 12px;
+    background: #f8f9fa;
+    border-radius: 8px;
+    border-left: 4px solid #667eea;
+}
+
+.result-list .result-item:last-child {
+    margin-bottom: 0;
+}
+
+.result-list .result-num {
+    font-weight: 600;
+    color: #667eea;
+    font-size: 0.9em;
+    margin-bottom: 6px;
+}
+

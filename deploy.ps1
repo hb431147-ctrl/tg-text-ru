@@ -1,8 +1,7 @@
-﻿# PowerShell скрипт для деплоя на сервер
-# Использование: 
-#   .\deploy.ps1              - обычный деплой
-#   .\deploy.ps1 -RollbackBack    - откат на одну версию назад
-#   .\deploy.ps1 -RollbackForward - откат на одну версию вперед
+# Deploy to server (git push -> post-receive hook)
+# Requires: Git, SSH key (create_ssh_key.ps1), post-receive on server.
+# Usage: .\deploy.ps1
+# Bot only: .\deploy_bot_update.ps1
 
 param(
     [switch]$RollbackBack,
@@ -14,133 +13,99 @@ $DOMAIN = "tg-text.ru"
 $WWW_ROOT = "/var/www/$DOMAIN"
 $SSH_KEY = "$env:USERPROFILE\.ssh\id_rsa_tg_text"
 
-# Проверка наличия SSH ключа
 if (-not (Test-Path $SSH_KEY)) {
-    Write-Host "ОШИБКА: SSH ключ не найден: $SSH_KEY" -ForegroundColor Red
-    Write-Host "Создайте ключ: .\create_ssh_key.ps1" -ForegroundColor Yellow
+    Write-Host "ERROR: SSH key not found: $SSH_KEY" -ForegroundColor Red
+    Write-Host "Create key: .\create_ssh_key.ps1" -ForegroundColor Yellow
     exit 1
 }
 
-# Проверка наличия Git
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
-    Write-Host "ОШИБКА: Git не установлен!" -ForegroundColor Red
+    Write-Host "ERROR: Git not installed!" -ForegroundColor Red
     exit 1
 }
 
-# Функция для отката назад
 function Rollback-Back {
-    Write-Host "=== Откат на одну версию назад ===" -ForegroundColor Yellow
-    
+    Write-Host "=== Rollback one commit ===" -ForegroundColor Yellow
     if (-not (Test-Path ".git")) {
-        Write-Host "ОШИБКА: Git репозиторий не инициализирован!" -ForegroundColor Red
+        Write-Host "ERROR: Not a Git repo!" -ForegroundColor Red
         exit 1
     }
-    
     $commits = git log --oneline --all
     if ($commits.Count -lt 2) {
-        Write-Host "ОШИБКА: Недостаточно коммитов для отката!" -ForegroundColor Red
+        Write-Host "ERROR: Not enough commits!" -ForegroundColor Red
         exit 1
     }
-    
     $previousCommit = ($commits[1] -split ' ')[0]
-    Write-Host "Откат к коммиту: $previousCommit" -ForegroundColor Cyan
-    
+    Write-Host "Rollback to: $previousCommit" -ForegroundColor Cyan
     git reset --hard $previousCommit
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "ОШИБКА: Не удалось выполнить откат!" -ForegroundColor Red
+        Write-Host "ERROR: Rollback failed!" -ForegroundColor Red
         exit 1
     }
-    
     Deploy-ToServer
     Deploy-ToGitHub
-    Write-Host "=== Откат завершен успешно! ===" -ForegroundColor Green
+    Write-Host "=== Rollback done ===" -ForegroundColor Green
 }
 
-# Функция для отката вперед
 function Rollback-Forward {
-    Write-Host "=== Откат на одну версию вперед ===" -ForegroundColor Yellow
-    
+    Write-Host "=== Rollback forward ===" -ForegroundColor Yellow
     if (-not (Test-Path ".git")) {
-        Write-Host "ОШИБКА: Git репозиторий не инициализирован!" -ForegroundColor Red
+        Write-Host "ERROR: Not a Git repo!" -ForegroundColor Red
         exit 1
     }
-    
     $previousHead = git rev-parse HEAD@{1} 2>&1
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "ОШИБКА: Не найдена предыдущая версия!" -ForegroundColor Red
+        Write-Host "ERROR: Previous HEAD not found!" -ForegroundColor Red
         exit 1
     }
-    
-    Write-Host "Возврат к коммиту: $previousHead" -ForegroundColor Cyan
+    Write-Host "Reset to: $previousHead" -ForegroundColor Cyan
     git reset --hard $previousHead
-    
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "ОШИБКА: Не удалось выполнить откат!" -ForegroundColor Red
+        Write-Host "ERROR: Rollback failed!" -ForegroundColor Red
         exit 1
     }
-    
     Deploy-ToServer
     Deploy-ToGitHub
-    Write-Host "=== Откат завершен успешно! ===" -ForegroundColor Green
+    Write-Host "=== Rollback done ===" -ForegroundColor Green
 }
 
-# Функция для отправки на сервер
 function Deploy-ToServer {
-    Write-Host "Отправка на сервер..." -ForegroundColor Yellow
-    
-    # Проверка наличия необходимых файлов
+    Write-Host "Pushing to server..." -ForegroundColor Yellow
     if (-not (Test-Path "app.js")) {
-        Write-Host "ПРЕДУПРЕЖДЕНИЕ: app.js не найден в корне проекта!" -ForegroundColor Yellow
+        Write-Host "WARNING: app.js not found!" -ForegroundColor Yellow
     }
     if (-not (Test-Path "nginx_tg-text.ru.conf")) {
-        Write-Host "ПРЕДУПРЕЖДЕНИЕ: nginx_tg-text.ru.conf не найден!" -ForegroundColor Yellow
+        Write-Host "WARNING: nginx_tg-text.ru.conf not found!" -ForegroundColor Yellow
     }
     if (-not (Test-Path "post-receive")) {
-        Write-Host "ПРЕДУПРЕЖДЕНИЕ: post-receive hook не найден!" -ForegroundColor Yellow
+        Write-Host "WARNING: post-receive not found!" -ForegroundColor Yellow
     }
-    
-    # Добавление/обновление remote
+
     $remotes = git remote
     if ($remotes -notcontains "production") {
         git remote add production "$SERVER`:$WWW_ROOT"
     } else {
         git remote set-url production "$SERVER`:$WWW_ROOT"
     }
-    
-    # Push на сервер
+
     $env:GIT_SSH_COMMAND = "ssh -i `"$SSH_KEY`" -o StrictHostKeyChecking=accept-new -o IdentitiesOnly=yes"
     $pushOutput = git push production main --force 2>&1
     Remove-Item Env:\GIT_SSH_COMMAND -ErrorAction SilentlyContinue
-    
+
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "ОШИБКА при отправке на сервер!" -ForegroundColor Red
+        Write-Host "ERROR: Push to server failed!" -ForegroundColor Red
         Write-Host $pushOutput -ForegroundColor Red
-        Write-Host ""
-        Write-Host "Проверьте SSH ключ на сервере:" -ForegroundColor Yellow
-        Write-Host "  type $SSH_KEY.pub" -ForegroundColor White
-        Write-Host "  ssh root@45.153.70.209" -ForegroundColor White
-        Write-Host "  echo 'ваш_ключ' >> ~/.ssh/authorized_keys" -ForegroundColor White
-        throw "Ошибка git push"
+        Write-Host "Add your key to server: type $SSH_KEY.pub then ssh root@45.153.70.209 and add to authorized_keys" -ForegroundColor Yellow
+        throw "git push failed"
     }
-    
-    Write-Host "Отправка выполнена успешно." -ForegroundColor Green
-    
-    # Деплой на сервере выполняется автоматически через post-receive hook
-    Write-Host "Деплой на сервере будет выполнен автоматически через Git hook (post-receive)." -ForegroundColor Gray
-    Write-Host "Hook автоматически:" -ForegroundColor Gray
-    Write-Host "  - Соберет React приложение" -ForegroundColor Gray
-    Write-Host "  - Скопирует app.js в /var/www/tg-text.ru/api/" -ForegroundColor Gray
-    Write-Host "  - Скопирует nginx конфигурацию в /etc/nginx/conf.d/" -ForegroundColor Gray
-    Write-Host "  - Перезапустит сервисы (text-processor, nginx)" -ForegroundColor Gray
+
+    Write-Host "Push OK. Deploy runs on server via post-receive hook." -ForegroundColor Green
 }
 
-# Функция для отправки в GitHub
 function Deploy-ToGitHub {
-    Write-Host "Отправка в GitHub..." -ForegroundColor Yellow
-    
+    Write-Host "Pushing to GitHub..." -ForegroundColor Yellow
     $remotes = git remote
     $githubRemote = $null
-    
     foreach ($remote in $remotes) {
         $url = git remote get-url $remote 2>&1
         if ($url -match "github.com.*tg-text-ru") {
@@ -148,7 +113,6 @@ function Deploy-ToGitHub {
             break
         }
     }
-    
     if (-not $githubRemote) {
         if ($remotes -contains "origin") {
             git remote set-url origin "https://github.com/hb431147-ctrl/tg-text-ru.git" 2>&1 | Out-Null
@@ -157,50 +121,39 @@ function Deploy-ToGitHub {
         }
         $githubRemote = "origin"
     }
-    
     git push $githubRemote main 2>&1 | Out-Null
-    
     if ($LASTEXITCODE -eq 0) {
-        Write-Host "Изменения отправлены в GitHub." -ForegroundColor Green
+        Write-Host "GitHub push OK." -ForegroundColor Green
     }
 }
 
-# Основная логика
 if ($RollbackBack) {
     Rollback-Back
     exit 0
 }
-
 if ($RollbackForward) {
     Rollback-Forward
     exit 0
 }
 
-# Обычный деплой
-Write-Host "=== Деплой на сервер ===" -ForegroundColor Green
+Write-Host "=== Deploy ===" -ForegroundColor Green
+Write-Host "React build runs on server via hook." -ForegroundColor Gray
 
-# Сборка React приложения выполняется на сервере через post-receive hook
-# Это гарантирует, что собранные файлы всегда соответствуют окружению сервера
-Write-Host "Сборка React приложения будет выполнена на сервере через Git hook." -ForegroundColor Gray
-
-# Инициализация Git если нужно
 if (-not (Test-Path ".git")) {
-    Write-Host "Инициализация Git репозитория..." -ForegroundColor Yellow
+    Write-Host "Init Git..." -ForegroundColor Yellow
     git init
     git branch -M main
 }
 
-# Добавление и коммит
-Write-Host "Добавление файлов в Git..." -ForegroundColor Yellow
+Write-Host "Adding files..." -ForegroundColor Yellow
 git add .
 $status = git status --porcelain
 if (-not [string]::IsNullOrWhiteSpace($status)) {
     git commit -m "Update: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
 }
 
-# Деплой
 Deploy-ToServer
 Deploy-ToGitHub
 
-Write-Host "=== Деплой завершен успешно! ===" -ForegroundColor Green
-Write-Host "Проверьте сайт: https://$DOMAIN" -ForegroundColor Cyan
+Write-Host "=== Deploy finished ===" -ForegroundColor Green
+Write-Host "Site: https://$DOMAIN" -ForegroundColor Cyan

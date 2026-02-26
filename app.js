@@ -12,6 +12,9 @@ const jwt = require('jsonwebtoken');
 const app = express();
 const PORT = process.env.PORT || 5000;
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production-2024';
+const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY || '';
+const DEEPSEEK_API_URL = 'https://api.deepseek.com/v1/chat/completions';
+const DEFAULT_PROMPT = 'Обработай текст по заданным правилам. Текст: {text}. Слова для исключения (и однокоренные): {exc}. Ответь только результатом, без пояснений.';
 
 // Настройки подключения к MySQL
 const dbConfig = {
@@ -279,6 +282,53 @@ function processText(text, excludeWordsStr) {
 }
 
 /**
+ * Вызов DeepSeek API
+ */
+async function callDeepSeek(promptText) {
+    if (!DEEPSEEK_API_KEY) {
+        return { error: 'DeepSeek API ключ не настроен на сервере' };
+    }
+    const res = await fetch(DEEPSEEK_API_URL, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${DEEPSEEK_API_KEY}`,
+        },
+        body: JSON.stringify({
+            model: 'deepseek-chat',
+            messages: [{ role: 'user', content: promptText }],
+            max_tokens: 4096,
+            temperature: 0.7,
+        }),
+    });
+    if (!res.ok) {
+        const errText = await res.text();
+        console.error('DeepSeek API error:', res.status, errText);
+        return { error: `DeepSeek API: ${res.status} ${errText.slice(0, 200)}` };
+    }
+    const data = await res.json();
+    const content = data.choices?.[0]?.message?.content?.trim() || '';
+    return { result: content || '(пустой ответ)' };
+}
+
+/**
+ * Получить настройки пользователя (промпт и количество)
+ */
+async function getUserSettings(userId) {
+    if (!dbPool || !userId) return { prompt_template: null, request_count: 1 };
+    const [rows] = await dbPool.execute(
+        'SELECT prompt_template, request_count FROM users WHERE id = ?',
+        [userId]
+    );
+    if (rows.length === 0) return { prompt_template: null, request_count: 1 };
+    const r = rows[0];
+    return {
+        prompt_template: r.prompt_template || null,
+        request_count: Math.max(1, parseInt(r.request_count, 10) || 1),
+    };
+}
+
+/**
  * Обработка OPTIONS для CORS preflight
  */
 app.options('/api/auth/register', cors());
@@ -410,64 +460,86 @@ app.post('/api/auth/login', async (req, res) => {
 });
 
 /**
- * API endpoint для обработки текста
+ * API: получить настройки (промпт и количество)
+ */
+app.get('/api/settings', authenticateToken, async (req, res) => {
+    try {
+        const settings = await getUserSettings(req.user.id);
+        return res.json(settings);
+    } catch (error) {
+        console.error('Ошибка получения настроек:', error);
+        return res.status(500).json({ error: error.message });
+    }
+});
+
+/**
+ * API: сохранить настройки (промпт и количество)
+ */
+app.post('/api/settings', authenticateToken, async (req, res) => {
+    try {
+        if (!dbPool) return res.status(503).json({ error: 'База данных недоступна' });
+        const { prompt_template, request_count } = req.body || {};
+        const count = Math.max(1, Math.min(10, parseInt(request_count, 10) || 1));
+        await dbPool.execute(
+            'UPDATE users SET prompt_template = ?, request_count = ? WHERE id = ?',
+            [prompt_template != null ? String(prompt_template) : null, count, req.user.id]
+        );
+        return res.json({ prompt_template: prompt_template || null, request_count: count });
+    } catch (error) {
+        console.error('Ошибка сохранения настроек:', error);
+        return res.status(500).json({ error: error.message });
+    }
+});
+
+/**
+ * API endpoint для обработки текста (DeepSeek: промпт с {text} и {exc}, количество запросов)
  */
 app.post('/api/process', optionalAuth, async (req, res) => {
     try {
-        console.log('Получен запрос:', {
-            method: req.method,
-            url: req.url,
-            contentType: req.get('Content-Type'),
-            body: req.body
-        });
-        
-        // Получаем данные из body
         let text = req.body?.text || req.body?.textInput || '';
         let exclude_words = req.body?.exclude_words || req.body?.excludeWords || req.body?.exclude || '';
-        
-        // Если body пустой, пробуем query параметры
-        if (!text) {
-            text = req.query.text || '';
-        }
-        if (!exclude_words) {
-            exclude_words = req.query.exclude_words || '';
-        }
-        
+        let promptTemplate = req.body?.prompt_template;
+        let requestCount = req.body?.request_count;
+
         if (!text || !text.trim()) {
-            console.log('Ошибка: текст пустой');
             return res.status(400).json({ error: 'Текст не может быть пустым' });
         }
-        
-        const result = processText(text.trim(), exclude_words ? exclude_words.trim() : '');
-        
-        if (result.error) {
-            console.log('Ошибка обработки:', result.error);
-            return res.status(400).json(result);
-        }
-        
-        // Сохраняем запрос в базу данных
-        if (dbPool) {
-            try {
-                const userIP = getUserIP(req);
-                const userAgent = req.headers['user-agent'] || '';
-                const requestText = text.trim();
-                const excludeWords = exclude_words ? exclude_words.trim() : null;
-                const resultText = result.result || '';
-                const userId = req.user ? req.user.id : null;
-                
+
+        const userId = req.user ? req.user.id : null;
+        const settings = await getUserSettings(userId);
+
+        if (promptTemplate === undefined || promptTemplate === null) promptTemplate = settings.prompt_template;
+        if (promptTemplate === undefined || promptTemplate === null || promptTemplate === '') promptTemplate = DEFAULT_PROMPT;
+        requestCount = requestCount !== undefined && requestCount !== null
+            ? Math.max(1, Math.min(10, parseInt(requestCount, 10) || 1))
+            : settings.request_count;
+
+        const filledPrompt = String(promptTemplate)
+            .replace(/\{text\}/g, text.trim())
+            .replace(/\{exc\}/g, exclude_words ? String(exclude_words).trim() : '');
+
+        const results = [];
+        const userIP = getUserIP(req);
+        const userAgent = req.headers['user-agent'] || '';
+
+        for (let i = 0; i < requestCount; i++) {
+            const result = await callDeepSeek(filledPrompt);
+            if (result.error) {
+                return res.status(502).json({ error: result.error });
+            }
+            results.push(result.result);
+            if (dbPool && userId) {
                 await dbPool.execute(
                     'INSERT INTO user_requests (user_ip, user_agent, request_text, exclude_words, result_text, user_id) VALUES (?, ?, ?, ?, ?, ?)',
-                    [userIP, userAgent, requestText, excludeWords, resultText, userId]
+                    [userIP, userAgent, text.trim(), exclude_words ? exclude_words.trim() : null, result.result, userId]
                 );
-                console.log('Запрос сохранен в базу данных');
-            } catch (dbError) {
-                console.error('Ошибка сохранения в БД:', dbError.message);
-                // Не прерываем выполнение, если ошибка БД
             }
         }
-        
-        console.log('Результат успешно обработан');
-        return res.status(200).json(result);
+
+        return res.status(200).json({
+            result: results.length === 1 ? results[0] : results,
+            results: results,
+        });
     } catch (error) {
         console.error('Ошибка обработки:', error);
         return res.status(500).json({ error: `Ошибка обработки: ${error.message}` });
@@ -475,35 +547,33 @@ app.post('/api/process', optionalAuth, async (req, res) => {
 });
 
 /**
- * API endpoint для получения истории запросов
+ * API endpoint для получения истории запросов (за последние 7 дней)
  */
 app.get('/api/history', authenticateToken, async (req, res) => {
     try {
         if (!dbPool) {
             return res.status(503).json({ error: 'База данных не доступна' });
         }
-        
-        const limit = parseInt(req.query.limit) || 50;
-        const offset = parseInt(req.query.offset) || 0;
+        const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
+        const offset = parseInt(req.query.offset, 10) || 0;
         const userId = req.user.id;
-        
-        // Получаем историю запросов пользователя (LIMIT и OFFSET не могут быть параметрами)
+
         const [rows] = await dbPool.execute(
-            `SELECT id, user_ip, request_text, exclude_words, result_text, created_at FROM user_requests WHERE user_id = ? ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`,
+            `SELECT id, user_ip, request_text, exclude_words, result_text, created_at FROM user_requests 
+             WHERE user_id = ? AND created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY) 
+             ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}`,
             [userId]
         );
-        
-        // Получаем общее количество запросов
         const [countRows] = await dbPool.execute(
-            'SELECT COUNT(*) as total FROM user_requests WHERE user_id = ?',
+            'SELECT COUNT(*) as total FROM user_requests WHERE user_id = ? AND created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)',
             [userId]
         );
-        
+
         return res.json({
             requests: rows,
             total: countRows[0].total,
-            limit: limit,
-            offset: offset
+            limit,
+            offset,
         });
     } catch (error) {
         console.error('Ошибка получения истории:', error);
