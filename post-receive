@@ -63,7 +63,7 @@ if [ -f "package.json" ]; then
     # Копируем собранные файлы из dist в public_html
     if [ -d "dist" ]; then
         echo "Копирование собранных файлов из dist..."
-        # Удаляем все старые файлы и копируем новые
+        mkdir -p ${DEPLOY_DIR}
         rm -rf ${DEPLOY_DIR}/*
         cp -r ${STAGING_DIR}/dist/* ${DEPLOY_DIR}/
         echo "Проверка index.html после копирования..."
@@ -187,9 +187,13 @@ if [ -f "${STAGING_DIR}/nginx_tg-text.ru.conf" ]; then
     echo "Конфигурация nginx обновлена"
 fi
 
-# Устанавливаем правильные права
+# Права: nginx (www-data) должен читать файлы и проходить по каталогам
+# Родительские каталоги — доступ на выполнение (traverse) для всех
+chmod o+rx "${WWW_ROOT}" 2>/dev/null || true
+chmod o+rx /var/www 2>/dev/null || true
 chown -R ${NGINX_USER}:${NGINX_USER} ${DEPLOY_DIR}
-chmod -R 755 ${DEPLOY_DIR}
+find ${DEPLOY_DIR} -type d -exec chmod 755 {} \;
+find ${DEPLOY_DIR} -type f -exec chmod 644 {} \;
 
 # Проверяем конфигурацию nginx
 echo "Проверка конфигурации nginx..."
