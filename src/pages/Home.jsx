@@ -22,10 +22,16 @@ function Home() {
     ? 'https://tg-text.ru/api'
     : '/api';
 
+  const buildTime = typeof __BUILD_TIME__ !== 'undefined' ? __BUILD_TIME__ : 'dev';
+
   useEffect(() => {
     loadHistory();
     loadSettings();
   }, []);
+
+  useEffect(() => {
+    document.title = buildTime ? `tg-text.ru (${buildTime})` : 'tg-text.ru';
+  }, [buildTime]);
 
   const loadSettings = async () => {
     setSettingsLoading(true);
@@ -149,7 +155,7 @@ function Home() {
       <div className="header">
         <div className="emoji">👋</div>
         <h1>Привет, я Никита</h1>
-        <span className="build-id" title="Версия сборки">{import.meta.env.VITE_BUILD_ID || 'dev'}</span>
+        <span className="build-id" title="Версия сборки">{buildTime}</span>
         <div className="user-info">
           <span>Пользователь: {user?.email}</span>
           <div>
