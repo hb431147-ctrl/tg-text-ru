@@ -162,14 +162,19 @@ function Deploy-Frontend {
 }
 
 function Deploy-FrontendOnServer {
-    # Сборка фронта на сервере после push — чтобы обновления всегда попадали на сайт
-    if (-not (Test-Path "package.json")) { return }
-    Write-Host "Building frontend on server..." -ForegroundColor Yellow
+    # Загружаем исходники с вашего ПК на сервер и собираем там — чтобы точно шла актуальная версия
+    if (-not (Test-Path "package.json") -or -not (Test-Path "src")) { return }
+    Write-Host "Uploading frontend source and building on server..." -ForegroundColor Yellow
     $buildDir = "$WWW_ROOT/build_tmp"
-    $cmd = "rm -rf $buildDir && mkdir -p $buildDir && cd $WWW_ROOT && export GIT_DIR=$WWW_ROOT/.git GIT_WORK_TREE=$buildDir && git checkout -f main && unset GIT_DIR GIT_WORK_TREE && cd $buildDir && export PATH=/usr/bin:/bin && npm install --production=false 2>/dev/null; npm run build && rm -rf $WWW_ROOT/public_html/* && cp -r dist/* $WWW_ROOT/public_html/ && chown -R www-data:www-data $WWW_ROOT/public_html && rm -rf $buildDir && echo DEPLOY_OK"
+    ssh -i $SSH_KEY -o StrictHostKeyChecking=accept-new $SERVER "rm -rf $buildDir; mkdir -p $buildDir" 2>&1 | Out-Null
+    scp -i $SSH_KEY -o StrictHostKeyChecking=accept-new -r index.html package.json vite.config.js src "${SERVER}:${buildDir}/" 2>&1 | Out-Null
+    if (Test-Path "package-lock.json") {
+        scp -i $SSH_KEY -o StrictHostKeyChecking=accept-new package-lock.json "${SERVER}:${buildDir}/" 2>&1 | Out-Null
+    }
+    $cmd = "cd $buildDir && export PATH=/usr/bin:/bin && npm install --production=false && npm run build && rm -rf $WWW_ROOT/public_html/* && cp -r dist/* $WWW_ROOT/public_html/ && chown -R www-data:www-data $WWW_ROOT/public_html && cd / && rm -rf $buildDir && echo DEPLOY_OK"
     $out = ssh -i $SSH_KEY -o StrictHostKeyChecking=accept-new $SERVER $cmd 2>&1
     if ($out -match "DEPLOY_OK") {
-        Write-Host "Frontend built and deployed on server." -ForegroundColor Green
+        Write-Host "Frontend (from your PC) built and deployed on server." -ForegroundColor Green
     } else {
         Write-Host $out -ForegroundColor Gray
         Write-Host "WARNING: Server build failed. Check output above." -ForegroundColor Yellow
