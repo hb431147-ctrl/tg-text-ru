@@ -105,8 +105,17 @@ function Deploy-ToServer {
 function Deploy-Frontend {
     # Build React locally and upload to server (server-side build often fails in hook)
     if (-not (Test-Path "package.json")) { return }
+    $npmCmd = Get-Command npm -ErrorAction SilentlyContinue
+    if (-not $npmCmd) {
+        $npmPath = "${env:ProgramFiles}\nodejs\npm.cmd"
+        if (Test-Path $npmPath) { $npmCmd = $npmPath }
+    }
+    if (-not $npmCmd) {
+        Write-Host "WARNING: npm not found. Install Node.js or run 'npm run build' and deploy again." -ForegroundColor Yellow
+        return
+    }
     Write-Host "Building React locally..." -ForegroundColor Yellow
-    npm run build 2>&1 | Out-Null
+    & $npmCmd run build 2>&1 | Out-Null
     if ($LASTEXITCODE -ne 0) {
         Write-Host "WARNING: npm run build failed, skipping frontend upload" -ForegroundColor Yellow
         return
