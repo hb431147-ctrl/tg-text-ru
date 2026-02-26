@@ -111,7 +111,9 @@ function Deploy-Frontend {
         if (Test-Path $npmPath) { $npmCmd = $npmPath }
     }
     if (-not $npmCmd) {
-        Write-Host "WARNING: npm not found. Install Node.js or run 'npm run build' and deploy again." -ForegroundColor Yellow
+        Write-Host "WARNING: npm not found. Frontend not uploaded." -ForegroundColor Yellow
+        Write-Host "  Option 1: Install Node.js (https://nodejs.org), then run deploy again." -ForegroundColor Gray
+        Write-Host "  Option 2: On server run: ssh root@45.153.70.209 'apt update; apt install -y nodejs npm'" -ForegroundColor Gray
         return
     }
     Write-Host "Building React locally..." -ForegroundColor Yellow

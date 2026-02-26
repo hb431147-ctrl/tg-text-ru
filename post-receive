@@ -5,6 +5,10 @@
 
 set -e
 
+# Hook часто запускается с пустым PATH — добавляем пути к node/npm
+export PATH="/usr/local/bin:/usr/bin:/bin:$PATH"
+[ -f /root/.nvm/nvm.sh ] && . /root/.nvm/nvm.sh
+
 DOMAIN="tg-text.ru"
 WWW_ROOT="/var/www/${DOMAIN}"
 DEPLOY_DIR="${WWW_ROOT}/public_html"
@@ -32,55 +36,41 @@ git checkout -f main 2>/dev/null || git checkout -f
 unset GIT_DIR
 unset GIT_WORK_TREE
 
-# Сборка React приложения на сервере
+# Сборка React приложения на сервере (при ошибке — не падаем, обновляем API/bot)
 echo "Сборка React приложения..."
 cd ${STAGING_DIR}
+BUILD_OK=0
 
 if [ -f "package.json" ]; then
-    # Проверяем наличие Node.js и npm
     if ! command -v npm &> /dev/null; then
-        echo "ОШИБКА: npm не установлен на сервере!"
-        exit 1
+        echo "ПРЕДУПРЕЖДЕНИЕ: npm не найден (PATH=$PATH). Установите Node.js на сервере: apt install nodejs npm"
+    else
+        if [ ! -d "node_modules" ]; then
+            echo "Установка зависимостей..."
+            npm install --production=false 2>&1 | tail -3
+        fi
+        echo "Запуск сборки..."
+        if npm run build 2>&1; then
+            BUILD_OK=1
+        else
+            echo "ПРЕДУПРЕЖДЕНИЕ: сборка не удалась, public_html не обновлён"
+        fi
     fi
-    
-    # Устанавливаем зависимости если нужно
-    if [ ! -d "node_modules" ]; then
-        echo "Установка зависимостей..."
-        npm install --production=false
-    fi
-    
-    # Собираем React приложение
-    echo "Запуск сборки..."
-    npm run build
-    
-    if [ $? -ne 0 ]; then
-        echo "ОШИБКА: Сборка не удалась!"
-        exit 1
-    fi
-    
-    echo "Сборка завершена успешно."
-    
-    # Копируем собранные файлы из dist в public_html
-    if [ -d "dist" ]; then
-        echo "Копирование собранных файлов из dist..."
+
+    if [ "$BUILD_OK" = "1" ] && [ -d "dist" ] && [ -f "dist/index.html" ]; then
+        echo "Копирование dist в public_html..."
         mkdir -p ${DEPLOY_DIR}
         rm -rf ${DEPLOY_DIR}/*
         cp -r ${STAGING_DIR}/dist/* ${DEPLOY_DIR}/
-        echo "Проверка index.html после копирования..."
-        if ! grep -q "/assets/" ${DEPLOY_DIR}/index.html 2>/dev/null; then
-            echo "ОШИБКА: index.html не содержит ссылок на /assets/ - пересобираем..."
-            # Пересобираем если что-то пошло не так
-            npm run build
-            rm -rf ${DEPLOY_DIR}/*
-            cp -r ${STAGING_DIR}/dist/* ${DEPLOY_DIR}/
-        fi
-        echo "Проверка файлов в public_html..."
-        ls -la ${DEPLOY_DIR}/assets/ 2>/dev/null || echo "ПРЕДУПРЕЖДЕНИЕ: папка assets не найдена!"
+        echo "Файлы в public_html:"
+        ls -la ${DEPLOY_DIR}/ 2>/dev/null || true
+        ls -la ${DEPLOY_DIR}/assets/ 2>/dev/null || true
     else
-        echo "ОШИБКА: Папка dist не найдена после сборки!"
-        exit 1
+        echo "ПРЕДУПРЕЖДЕНИЕ: dist пуст или нет — public_html не обновлён. Соберите локально (npm run build) и загрузите через deploy.ps1"
     fi
-else
+fi
+
+if [ ! -f "package.json" ]; then
     echo "Предупреждение: package.json не найден, используем старые файлы"
     
     # Проверяем наличие index.html
