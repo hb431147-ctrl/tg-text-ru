@@ -12,7 +12,7 @@ STAGING_DIR="${WWW_ROOT}/staging"
 NGINX_USER="www-data"
 GIT_DIR="${WWW_ROOT}/.git"
 
-echo "=== Начало деплоя ==="
+echo "=== Deploy start ==="
 date
 
 # Читаем данные из stdin (стандартный ввод Git hook)
