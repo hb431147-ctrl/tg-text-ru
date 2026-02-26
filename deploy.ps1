@@ -114,7 +114,10 @@ function Deploy-ApiOnServer {
     if (Test-Path "telegram-bot.service") {
         scp -i $SSH_KEY -o StrictHostKeyChecking=accept-new telegram-bot.service "${SERVER}:/etc/systemd/system/" 2>&1 | Out-Null
     }
-    $restart = "systemctl daemon-reload; systemctl restart text-processor; systemctl restart telegram-bot 2>/dev/null; echo API_OK"
+    if (Test-Path "nginx_tg-text.ru.conf") {
+        scp -i $SSH_KEY -o StrictHostKeyChecking=accept-new nginx_tg-text.ru.conf "${SERVER}:/etc/nginx/conf.d/tg-text.ru.conf" 2>&1 | Out-Null
+    }
+    $restart = "systemctl daemon-reload; systemctl restart text-processor; systemctl restart telegram-bot 2>/dev/null; nginx -t 2>/dev/null && systemctl reload nginx; echo API_OK"
     $out = ssh -i $SSH_KEY -o StrictHostKeyChecking=accept-new $SERVER $restart 2>&1
     if ($out -match "API_OK") {
         Write-Host "API and services updated and restarted." -ForegroundColor Green

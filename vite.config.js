@@ -3,6 +3,9 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   plugins: [react()],
+  define: {
+    'import.meta.env.VITE_BUILD_ID': JSON.stringify(new Date().toISOString().slice(0, 19).replace('T', ' ')),
+  },
   build: {
     outDir: 'dist',
     assetsDir: 'assets',

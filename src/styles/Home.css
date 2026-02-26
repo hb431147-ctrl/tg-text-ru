@@ -24,6 +24,14 @@
     margin-bottom: 30px;
 }
 
+.build-id {
+    display: inline-block;
+    margin-left: 12px;
+    font-size: 11px;
+    color: #999;
+    font-weight: normal;
+}
+
 .emoji {
     font-size: 3em;
     margin-bottom: 15px;

@@ -149,6 +149,7 @@ function Home() {
       <div className="header">
         <div className="emoji">👋</div>
         <h1>Привет, я Никита</h1>
+        <span className="build-id" title="Версия сборки">{import.meta.env.VITE_BUILD_ID || 'dev'}</span>
         <div className="user-info">
           <span>Пользователь: {user?.email}</span>
           <div>
