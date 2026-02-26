@@ -536,10 +536,7 @@ app.post('/api/process', optionalAuth, async (req, res) => {
             }
         }
 
-        return res.status(200).json({
-            result: results.length === 1 ? results[0] : results,
-            results: results,
-        });
+        return res.status(200).json({ results: results });
     } catch (error) {
         console.error('Ошибка обработки:', error);
         return res.status(500).json({ error: `Ошибка обработки: ${error.message}` });
