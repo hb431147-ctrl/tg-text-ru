@@ -1,0 +1,18 @@
+{
+  "user": {
+    "id": 5,
+    "email": "abc@mail.rus",
+    "name": "V"
+  },
+  "total": 1,
+  "requests": [
+    {
+      "id": 8,
+      "user_ip": "telegram_bot",
+      "request_text": "оогата лагали лангет то агат овраг",
+      "exclude_words": null,
+      "result_text": "то овраг лангет оогата лагали агат",
+      "created_at": "2026-02-23T04:08:23.000Z"
+    }
+  ]
+}

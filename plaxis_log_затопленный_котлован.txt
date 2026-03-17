@@ -1,0 +1,118 @@
+# ============================================================================
+# ЛОГ КОМАНД PLAXIS 2D — ВОЗВЕДЕНИЕ ЗАТОПЛЕННОГО КОТЛОВАНА
+# По учебному пособию PLAXIS 2D 2011 (табл. 3.1–3.3, рис. 3.1–3.8)
+# При необходимости уточните в своей версии: SoilModel, _fixedendanchor, уровень УГВ.
+# ============================================================================
+
+# --- 1. ИНИЦИАЛИЗАЦИЯ ПРОЕКТА ---
+# Общие настройки: Xmin=0, Xmax=65, Ymin=-30, Ymax=20. Plane strain, 15-node.
+_initializerectangular SoilContour 0 -30 65 20
+
+_setproperties "Title" "Затопленный котлован" "Company" "" "Comments" "" "UnitForce" "kN" "UnitLength" "m" "UnitTime" "day" "WaterWeight" 10 "ModelType" "Plane strain" "ElementType" "15-Noded"
+
+# --- 2. МАТЕРИАЛЫ ГРУНТА ---
+# Глина: Mohr-Coulomb (Soft soil в пособии), γ_unsat=16, γ_sat=18, C_ref=1, φ=25°, ψ=0, R_inter=0.5. Eref — эквивалент для мягкой глины.
+_soilmat "Comments" "" "Metadata" "" "MaterialName" "Глина" "Colour" 8421504 "MaterialNumber" 0 "SoilModel" 2 "DrainageType" 1 "gamma" 16 "gamma_sat" 18 "Eref" 3000 "nu" 0.35 "Cref" 1 "phi" 25 "psi" 0 "Rinter" 0.5
+
+# Песок: Hardening soil, Drained, γ_unsat=17, γ_sat=20, E_50^ref=40000, E_oed^ref=40000, E_ur^ref=120000, C_ref=0, φ=32°, ψ=2, v_ur=0.2, R_inter=0.67
+_soilmat "Comments" "" "Metadata" "" "MaterialName" "Песок" "Colour" 16776960 "MaterialNumber" 0 "SoilModel" 1 "DrainageType" 0 "gamma" 17 "gamma_sat" 20 "Eref" 40000 "Eoed" 40000 "Eur" 120000 "Cref" 0 "phi" 32 "psi" 2 "nu" 0.2 "Rinter" 0.67
+
+# Нижний интерфейс (копия Песок, R_inter=1 — Rigid)
+_soilmat "Comments" "" "Metadata" "" "MaterialName" "Нижний интерфейс" "Colour" 16776960 "MaterialNumber" 0 "SoilModel" 1 "DrainageType" 0 "gamma" 17 "gamma_sat" 20 "Eref" 40000 "Cref" 0 "phi" 32 "psi" 2 "nu" 0.2 "Rinter" 1
+
+# --- 3. МАТЕРИАЛЫ КОНСТРУКЦИЙ ---
+# Стенка в грунте (плита): EA=7.5e6 кН/м, EI=1e6 кНм/м, w=10 кН/м/м, nu=0
+_platemat "Comments" "" "Metadata" "" "MaterialName" "Стенка" "Colour" 16711680 "MaterialNumber" 0 "EA" 7500000 "EA2" 7500000 "EI" 1000000 "nu" 0 "w" 10
+
+# Распорка (анкер с защемлённым концом): EA=2e6 кН, Lspacing=5 м
+_anchormat "Comments" "" "Metadata" "" "MaterialName" "Распорка" "Colour" 0 "MaterialNumber" 0 "EA" 2000000 "Lspacing" 5
+
+# --- 4. ГЕОМЕТРИЯ: КОНТУР И СЛОИ ---
+# Контур задан _initializerectangular. Линия раздела слоёв (0,0)—(65,0).
+_line (0 0) (65 0)
+_borehole 0
+_soillayer 0
+_set Soillayer_1.Zones[0].Top 20
+_set Soillayer_1.Zones[0].Bottom 0
+_set Soillayer_1.Soil.Material Глина
+_soillayer 0
+_set Soillayer_2.Zones[0].Bottom -30
+_set Soillayer_2.Soil.Material Песок
+
+_gotostructures
+
+# --- 5. СТЕНКА В ГРУНТЕ (50,20) — (50,-10) ---
+_plate (50 20) (50 -10)
+_setmaterial (Plate_1) Стенка
+_neginterface (Line_1)
+_posinterface (Line_1)
+
+# --- 6. ЛИНИИ ЭТАПОВ ЭКСКАВАЦИИ ---
+_line (50 18) (65 18)
+_line (50 10) (65 10)
+
+# --- 7. ИНТЕРФЕЙС ВДОЛЬ СТЕНКИ (50,20) — (50,-11) ---
+# (создаётся по Line_1, интерфейсы уже добавлены выше)
+
+# --- 8. АНКЕР С ЗАЩЕМЛЁННЫМ КОНЦОМ: точка (50,19), экв. длина 15 м, угол 0° ---
+# Fixed-end anchor: привязка к стенке на 1 м ниже верха (50,19), Equivalent length=15 м
+# После создания анкера проверьте имя в Model explorer (например FixedEndAnchor_1) и подставьте ниже.
+_fixedendanchor (50 19) 15 0
+_setmaterial (FixedEndAnchor_1) Распорка
+
+# --- 9. ПОВЕРХНОСТНАЯ НАГРУЗКА (43,20) — (48,20), qy = -5 кН/м² ---
+# Нагрузка на линию 5 (последняя созданная линия)
+_lineload (43 20) (48 20)
+_set Line_5.LineLoad.qy_start -5
+_set Line_5.LineLoad.qy_end -5
+
+# --- 10. ГРАНИЧНЫЕ УСЛОВИЯ (Standard fixities) ---
+# Применяются через интерфейс или отдельной командой — по умолчанию при расчёте
+
+# --- 11. НАЗНАЧЕНИЕ МАТЕРИАЛОВ КЛАСТЕРАМ ---
+# Глина — верхние кластеры (0..20 м), Песок — нижний (0..-30 м) уже через Soillayer
+# Нижний интерфейс — назначить на интерфейсы под стенкой (положительный и отрицательный)
+
+_mergeequivalents Geometry
+
+# --- 12. СЕТКА: глобально крупная, затем генерация ---
+_gotomesh
+_mesh 1
+_generatemesh
+
+# --- 13. УСЛОВИЯ ПО ВОДЕ: уровень грунтовых вод (0,18)—(65,18), 2 м ниже поверхности ---
+_gotoflow
+_waterlevel (0 18) (65 18)
+_gotostages
+
+# --- 14. ФАЗЫ РАСЧЁТА ---
+_phase InitialPhase
+_set Model.CurrentPhase InitialPhase
+
+_phase Phase_1
+_set Model.CurrentPhase Phase_1
+_activate (Plate_1) Phase_1
+_activate (Line_5) Phase_1
+_activate (FixedEndAnchor_1) Phase_1
+
+_phase Phase_2
+_set Model.CurrentPhase Phase_2
+_deactivate (BoreholePolygon_1_2) Phase_2
+
+_phase Phase_3
+_set Model.CurrentPhase Phase_3
+_activate (Anchor_1) Phase_3
+
+_phase Phase_4
+_set Model.CurrentPhase Phase_4
+_deactivate (BoreholePolygon_1_3) Phase_4
+
+_phase Phase_5
+_set Model.CurrentPhase Phase_5
+_deactivate (BoreholePolygon_1_4) Phase_5
+
+# --- 15. РАСЧЁТ ---
+_calculate
+
+# --- 16. ПРОСМОТР РЕЗУЛЬТАТОВ ---
+_view Phase_5

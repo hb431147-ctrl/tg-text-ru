@@ -1,0 +1,18 @@
+{
+  "user": {
+    "id": 3,
+    "email": "jdhdh@mail.ru",
+    "name": "Виктор"
+  },
+  "total": 1,
+  "requests": [
+    {
+      "id": 7,
+      "user_ip": "119.93.168.247",
+      "request_text": "Оплат шалаша алао",
+      "exclude_words": "Алао",
+      "result_text": "шалаша Оплат ",
+      "created_at": "2026-02-20T20:00:24.000Z"
+    }
+  ]
+}
